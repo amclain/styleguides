@@ -66,8 +66,8 @@ let(:foo) { "bar" }
 
 # Hash Rocket
 # 
-# Prefer the colon syntax over the hash rocket `=>`. This takes up less space
-# and is easier to read.
+# Prefer the colon syntax over the hash rocket `=>`. This takes up less space,
+# requires fewer characters, and more closely relates the value to the key.
 data = {foo: 1, bar: 2, baz: 3}
 
 
@@ -117,8 +117,8 @@ end
 
 # Ternary
 # 
-# Prefer the ternary operator `?` for single-line if/else assignment. Do not use
-# it to replace conditional logic.
+# Prefer the ternary operator `?` for conditional assignment that can fit on a
+# single line. Do not use it to replace conditional logic.
 x = data > 50 ? formula_1(data) : formula_2(data)
 
 # Don't do this!
