@@ -55,6 +55,28 @@ The following are additions and exceptions to the style guide that have been ado
     end
   ```
 
+* <a name="parentheses-typespec"></a>
+  *Do not* use parentheses after zero-arity types in a typespec.
+  <sup>[[link](#parentheses-typespec)]</sup>
+  ```elixir
+  @spec my_function(map) :: list
+  ```
+
+* <a name="parentheses-zero-arity-function"></a>
+  *Do not* use parentheses after zero-arity functions that follow a module name.
+  <sup>[[link](#parentheses-zero-arity-function)]</sup>
+  ```elixir
+  MyModule.do_action
+  ```
+
+* <a name="parentheses-pipe-operator"></a>
+  *Do not* use parentheses after one-arity functions when using the pipe operator (`|>`).
+  <sup>[[link](#parentheses-pipe-operator)]</sup>
+  <sup>[[original](https://github.com/christopheradams/elixir_style_guide/blob/master/README.md#parentheses-pipe-operator)]</sup>
+  ```elixir
+  some_string |> String.downcase |> String.trim
+  ```
+
 * <a name="single-pipeline-ok"></a>
   It is ok to use the pipe operator just once. This can be useful when wanting to emphasize a transformation.
   <sup>[[link](#single-pipeline-ok)]</sup>
@@ -69,9 +91,9 @@ The following are additions and exceptions to the style guide that have been ado
   ```elixir
   transformed_string =
     some_string
-    |> String.strip()
-    |> String.downcase()
-    |> String.codepoints()
+    |> String.strip
+    |> String.downcase
+    |> String.codepoints
   ```
 
 * <a name="single-line-comments"></a>
