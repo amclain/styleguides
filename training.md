@@ -35,6 +35,21 @@ Rules are developed in a separate working environment and synced to this reposit
 
 ---
 
+## Rule Review (from findings)
+
+When reviewing candidate rules extracted from source material (books, style guides, codebases), follow this process for each rule:
+
+1. **Present the rule** — print the rule with observations. If the rule matches a convention in the user's code, bias toward the user's style and cite it. Note other authors and their opinions on similar rules.
+2. **Pattern file** — write code examples to a `.c` (or language-appropriate) file in `patterns/` for user review. The user will edit formatting or add comments to clarify the rule.
+3. **Document and record** — once the user approves, write the rule into the language's `CLAUDE.md` (e.g. `c/CLAUDE.md`) following the standard rule format: intent, convention, examples (`// good` / `// avoid`), when to deviate. Update memory with which rules are complete.
+4. **Next rule or section validation:**
+   - If more rules remain in the section, repeat from step 1 with the next rule.
+   - If the section is complete, run a cold Sonnet agent to generate code following the documented rules. Refine rules until the agent writes correct code.
+5. **Cold Opus review** — run an Opus cold reviewer that suggests improvements. The main agent validates each suggestion, implementing only confirmed improvements. If any changes affect agent behavior, return to step 4 and retest with a cold generation agent.
+6. **Checkpoint** — review session context, ensure all knowledge is documented. Mark the section complete and update memory.
+
+---
+
 ## Validation
 
 After rules are written, validate that the target runtime agent (Sonnet) actually follows them when generating code. Validation uses consensus filtering to separate real rule misses from reviewer noise.

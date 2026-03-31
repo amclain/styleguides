@@ -144,6 +144,65 @@ def pause do
 end
 ```
 
+```c
+// good - local variable names the threshold close to its use
+int airflow_threshold_cfm = 20;
+if (airflow_cfm > airflow_threshold_cfm)
+  set_mode(MODE_NORMAL);
+
+// good - #define for a shared configuration value
+#define MAX_RETRY_ATTEMPTS 3
+
+// acceptable - idiomatic, any C programmer knows what 0 and -1 mean
+return 0;
+return -1;
+
+// avoid - constant adds no information
+#define ZERO 0
+return ZERO;
+```
+
+---
+
+### Named Boolean Expressions
+
+When a boolean condition is complex (multiple comparisons, logical operators), extract it to a named boolean variable. The name documents the intent of the condition. The `if` statement then reads as a simple question.
+
+```c
+// good - named booleans make the if statement a simple question
+bool is_bad_request =
+  header_decode(buffer, index, &call) < 0
+  || call.action == ACTION_UNKNOWN
+  || call.object_type == TYPE_UNKNOWN;
+
+if (is_bad_request)
+  return -1;
+
+// avoid - complex condition inline in if
+if (
+  header_decode(buffer, index, &call) < 0
+  || call.action == ACTION_UNKNOWN
+  || call.object_type == TYPE_UNKNOWN
+) {
+  return -1;
+}
+```
+
+```elixir
+# good - named boolean makes the conditional clear
+is_above_threshold = lux >= @darkness_threshold_lux
+has_valid_reading = reading.status == :ok
+
+if is_above_threshold and has_valid_reading do
+  publish_reading(reading)
+end
+
+# avoid - complex condition inline
+if lux >= @darkness_threshold_lux and reading.status == :ok do
+  publish_reading(reading)
+end
+```
+
 ---
 
 ### Documentation Notation
@@ -180,6 +239,26 @@ def write_output(channel, :off), do: write_coil(channel, 0)
 def write_output(channel, value) do
   write_coil(channel, value)
 end
+```
+
+```c
+// good - C: API uses enum; translation happens inside the module
+typedef enum {
+  OUTPUT_OFF = 1,
+  OUTPUT_ON = 2,
+} output_state_t;
+
+int write_output(uint8_t channel, output_state_t state)
+{
+  uint8_t raw_value = (state == OUTPUT_ON) ? 1 : 0;
+  return write_coil(channel, raw_value);
+}
+
+// avoid - C: hardware primitives leak through the API
+int write_output(uint8_t channel, uint8_t value)
+{
+  return write_coil(channel, value);
+}
 ```
 
 Virtual and host implementations represent the domain, not the hardware. They have no hardware to interface with and should not carry over hardware-level encodings. Use domain concepts throughout - the real implementation is responsible for translating between domain and hardware at its boundary.
@@ -225,6 +304,16 @@ if response.status == 503 and attempt < max_attempts ...
 if state.last_ping + state.timeout < now() ...
 ```
 
+```c
+// good
+if (should_retry(response))
+  retry();
+
+// avoid - reader must parse the condition to understand intent
+if (response.status == 503 && attempt < max_attempts)
+  retry();
+```
+
 ---
 
 ### Avoid Negative Conditionals
@@ -245,6 +334,16 @@ if buffer.should_compact? ...
 
 # avoid
 if !buffer.should_not_compact? ...
+```
+
+```c
+// good
+if (is_valid(connection))
+  process(connection);
+
+// avoid
+if (!is_invalid(connection))
+  process(connection);
 ```
 
 ---
@@ -384,6 +483,23 @@ test "connection defaults to port 6379"
 # avoid — mirrors code structure, describes nothing
 test "connect/1"
 test "test_connect"
+```
+
+In C test frameworks, the test name is a function identifier rather than a string. The same behavioral proposition principle applies - the function name should describe the expected behavior, not mirror the function under test.
+
+```c
+// good - behavioral propositions as function names
+void test_sensor_read_returns_negative_on_hardware_failure(void) { ... }
+void test_sensor_read_returns_calibrated_value(void) { ... }
+void test_config_store_overwrites_existing_key(void) { ... }
+
+// avoid - mirrors the function name, describes nothing
+void test_sensor_read(void) { ... }
+void test_config_store_set(void) { ... }
+
+// In Google Test, the same principle applies:
+// TEST(SensorRead, ReturnsNegativeOnHardwareFailure) { ... }
+// TEST(SensorRead, ReturnsCalibratedValue) { ... }
 ```
 
 ---
@@ -614,6 +730,10 @@ Do not use comments to describe what the code is doing. Write self-documenting c
 
 Use comments to explain *why* something is done when the reason is not apparent from the code itself.
 
+Do not use section divider comments (`// --- Private ---`, `// === Helpers ===`, `// ---------------------------------------------------------------------------`, etc.). Code structure is already defined by function ordering, visibility modifiers, and file organization. Narrating the structure with dividers is redundant and adds noise.
+
+Do not embed editor-specific markers in source files (`vim: set ...`, `-*- mode: c -*-`, etc.). Editor configuration belongs in project-level config files (`.editorconfig`), not in source code.
+
 Do not write style rules or style guide instructions in code comments. Comments like `# colon-suffix signals a label, not a prose chain` or `# describe + specify: one primary test whose description lives on describe` are teaching the style guide, not explaining the code. The style guide is a separate document - its rules should not be embedded in generated code.
 
 ```elixir
@@ -644,6 +764,22 @@ end
 value = proprietary_algorithm(coerced_value)
 ```
 
+```c
+// good - self-documenting code needs no comments
+int32_t fan_speed_rpm = get_fan_speed(fan);
+double airflow_cfm = convert_rpm_to_cfm(fan_speed_rpm);
+
+if (airflow_cfm > 20.0)
+  set_mode(MODE_NORMAL);
+else
+  set_mode(MODE_QUIET);
+
+// avoid - poor naming forces the explanation
+// Gets the fan speed in RPMs and converts to CFM
+int s = get_fan(f);
+double af = convert(s);
+```
+
 ### Comments Are Prose, Not Source Code
 
 Do not write comments that express concepts using source code syntax. A comment like `# high=1, low=0 → lux = (1 <<< 16) ||| 0 = 65536` is neither readable prose nor executable code - it falls in between and serves neither purpose well. Either write the logic as actual source code that demonstrates the calculation, or describe the protocol in prose.
@@ -658,6 +794,18 @@ let :expected_lux, do: Bitwise.bsl(high_word(), 16) ||| low_word()
 
 # avoid - code syntax in a comment; not prose, not executable
 # high=1, low=0 → lux = (1 <<< 16) ||| 0 = 65536
+```
+
+```c
+// good - prose describes the protocol
+// The sensor returns lux as two 16-bit words: high word first, low word second.
+// The full value is (high << 16) | low.
+
+// good - source code demonstrates the calculation
+uint32_t expected_lux = (high_word << 16) | low_word;
+
+// avoid - code syntax in a comment
+// high=1, low=0 -> lux = (1 << 16) | 0 = 65536
 ```
 
 ### Placement
