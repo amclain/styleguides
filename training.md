@@ -42,11 +42,12 @@ When reviewing candidate rules extracted from source material (books, style guid
 1. **Present the rule** — print the rule with observations. If the rule matches a convention in the user's code, bias toward the user's style and cite it. Note other authors and their opinions on similar rules.
 2. **Pattern file** — write code examples to a `.c` (or language-appropriate) file in `patterns/` for user review. The user will edit formatting or add comments to clarify the rule.
 3. **Document and record** — once the user approves, write the rule into the language's `CLAUDE.md` (e.g. `c/CLAUDE.md`) following the standard rule format: intent, convention, examples (`// good` / `// avoid`), when to deviate. Update memory with which rules are complete.
-4. **Next rule or section validation:**
+4. **Validate examples compile** — verify that all `// good` examples in the section actually compile and run correctly. Build a test file with scaffolding (type stubs, dummy functions) that includes the examples as real code. If an example doesn't compile, fix it. Examples that don't compile teach agents broken patterns.
+5. **Next rule or section validation:**
    - If more rules remain in the section, repeat from step 1 with the next rule.
    - If the section is complete, run a cold Sonnet agent to generate code following the documented rules. Refine rules until the agent writes correct code.
-5. **Cold Opus review** — run an Opus cold reviewer that suggests improvements. The main agent validates each suggestion, implementing only confirmed improvements. If any changes affect agent behavior, return to step 4 and retest with a cold generation agent.
-6. **Checkpoint** — review session context, ensure all knowledge is documented. Mark the section complete and update memory.
+6. **Cold Opus review** — run an Opus cold reviewer that audits all examples against all rules (not just the rule they demonstrate). The main agent validates each finding, implementing only confirmed improvements. If any changes affect agent behavior, return to step 5 and retest with a cold generation agent.
+7. **Checkpoint** — review session context, ensure all knowledge is documented. Mark the section complete and update memory.
 
 ---
 
@@ -185,7 +186,7 @@ The nervesconf25 exercise at `https://github.com/redwirelabs/nervesconf25_exerci
 2. **Add project CLAUDE.md:** Create a CLAUDE.md in the cloned project with the context below. This provides the agent with hardware details and the test command - the same context a human would get from reading the exercise README and datasheets, condensed to avoid repetitive prompting.
 3. **Style guide discovery:** Give the agent the GitHub URL to the style guide repo. The agent should clone it into the project's dependency directory, run first-run checks, and present model preferences.
 4. **Code generation:** Have the agent complete the exercise. Use Sonnet for generation. The generator must run the test suite and ensure all tests pass before the review step. The Sonnet generator will produce style violations (known limitations with zero-arity parens, `@impl true`, spec naming, etc.) - this is expected and handled by the formatter pass.
-5. **Opus formatter pass:** Launch 1 Opus agent that fixes violations autonomously and runs tests after. This is the "fix" mode - the agent edits files directly and verifies tests still pass. Report a summary of changes when done.
+5. **Opus formatter pass:** Launch 1 Opus agent that fixes violations autonomously and runs tests after. This is the "fix" mode - the agent edits files directly and verifies tests still pass. Report a summary of changes when done. The Opus formatter must apply all fixes itself - do not delegate to Sonnet subagents. Sonnet lacks the judgment to distinguish between similar style cases (e.g. single-line vs multi-line brace rules) and will apply rules incorrectly, causing more damage than it fixes.
 6. **Validation review:** Launch a separate Opus report-only reviewer to audit the formatter's work. This agent identifies remaining violations but does NOT edit files - it reports only. Use report-only mode to preserve the formatter's output for inspection. This measures how thorough the formatter pass was.
 
 ### Project CLAUDE.md content

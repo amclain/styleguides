@@ -46,14 +46,17 @@ Do not explain reasoning unless the user asks. The user can:
 
 1. Load the style guide (see above)
 2. Identify changed files via `git diff --name-only` and `git diff --staged --name-only`
-3. Read each changed file
-4. Identify style violations against the loaded rules
-5. Present the numbered list
-6. Wait for user input
-7. Apply requested changes using the Edit tool
+3. Run mechanical checks on the changed files (see the format-code skill for the checklist) - these find patterns that are difficult to detect by reading code
+4. Read each changed file
+5. Review each mechanical check result against the style rules - not every match is a violation, use judgment
+6. Identify additional style violations by reading the code
+7. Present the numbered list (mechanical findings + reading findings combined)
+8. Wait for user input
+9. Apply requested changes using the Edit tool
 
 ## Important
 
+- Do NOT delegate style fixes to Sonnet subagents. Sonnet lacks the judgment to distinguish between similar style cases and will apply rules incorrectly. Apply all fixes directly as the Opus review agent.
 - Do NOT change program logic or behavior - only flag style issues
 - ESpec matchers (`be_integer()`, `be_alive()`, `be_truthy()`) are function calls - do NOT flag their parentheses
 - Trailing commas are valid in collections but NOT in function argument lists

@@ -67,6 +67,8 @@ Unity calls `setUp()` before each test and `tearDown()` after each. Use them for
 
 Only define `setUp` and `tearDown` when there is work to perform. An empty `setUp` or `tearDown` is noise.
 
+Place `setUp` and `tearDown` after static variables and helper functions, just before the first test function. They may reference static helpers or variables, so those must be defined above them.
+
 ```c
 static sensor_t sensor;
 
@@ -81,14 +83,21 @@ void tearDown(void)
 }
 ```
 
-When setUp grows beyond a handful of lines, extract named helper functions. Name helpers after the scenario they create, not the steps they perform.
+When setUp grows beyond a handful of lines, extract named helper functions. Name helpers after the scenario they create, not the steps they perform. Test helper names are chosen for readability in the test body - they carry the test's narrative. The helper name is more important than its arguments, since the arguments are often scaffolding the reader skips.
 
 ```c
-// good - name describes the scenario
+// good - name describes the scenario; reads well in test body
 static void configure_with_default_calibration(sensor_t* sensor) { ... }
+
+// good - concise name for readability in tests
+static sensor_t* add_sensor(registry_t* registry, ...) { ... }
+static sensor_t* add_dependent(registry_t* registry, sensor_t* parent, ...) { ... }
 
 // avoid - name describes the steps
 static void init_sensor_and_set_offsets(sensor_t* sensor) { ... }
+
+// avoid - mirrors module API naming instead of test readability
+static sensor_t* sensor_registry_create_and_add(registry_t* registry, ...) { ... }
 ```
 
 ---
@@ -116,6 +125,130 @@ int main(void)
 ```
 
 Comments as section headers provide the grouping that C lacks from `describe`/`context` blocks. Keep them terse - one line, lowercase.
+
+---
+
+## Test Code Principles
+
+Tests are not implementation code. The goal of a test is to tell a story: what is set up, what action is taken, what is asserted. Formatting rules serve this story.
+
+### Test Variable Placement
+
+Declare output variables (the "what comes out") at the top of the test function alongside input variables (the "what goes in"). Together they show the test's interface before the setup scaffolding begins.
+
+```c
+// good - outputs and inputs at top, then setup, then action + assertion
+void test_parses_valid_reading(void)
+{
+  reading_t reading;
+  uint8_t frame[64] = { 0 };
+
+  write_header(frame, MSG_TYPE_READING);
+  write_payload(frame + HEADER_SIZE, 0x0048, 2350);
+  size_t length = HEADER_SIZE + PAYLOAD_SIZE;
+
+  TEST_ASSERT_EQUAL_INT(0, parse_reading(frame, length, &reading));
+  TEST_ASSERT_EQUAL_UINT16(0x0048, reading.address);
+}
+
+// avoid - output variable buried after setup
+void test_parses_valid_reading(void)
+{
+  uint8_t frame[64] = { 0 };
+  write_header(frame, MSG_TYPE_READING);
+  write_payload(frame + HEADER_SIZE, 0x0048, 2350);
+  size_t length = HEADER_SIZE + PAYLOAD_SIZE;
+
+  reading_t reading;
+  TEST_ASSERT_EQUAL_INT(0, parse_reading(frame, length, &reading));
+}
+```
+
+### Inline Assertions
+
+When testing a function's return value, inline the call in the assertion rather than extracting to a variable. The assertion is already testing the error - extracting adds a line that says nothing new. Split the assertion to multiple lines when it exceeds 80 characters.
+
+```c
+// good - inline when it fits
+TEST_ASSERT_EQUAL_INT(-1, sensor_read(NULL, &value));
+TEST_ASSERT_EQUAL_INT(0, sensor_init(&config));
+TEST_ASSERT_NULL(find_sensor(unknown_id));
+
+// good - split when it exceeds 80 chars
+TEST_ASSERT_EQUAL_INT(
+  EXPECTED_VALUE,
+  sensor_read_calibrated(&sensor, channel, &output)
+);
+
+// avoid - extracting to a variable when the assertion already tests it
+int error = sensor_read(NULL, &value);
+TEST_ASSERT_EQUAL_INT(-1, error);
+```
+
+### Test Fixtures with Defaults
+
+When test helpers take many arguments, most of which are boilerplate defaults, use a params struct with a default initializer macro. Tests override only the fields that matter to their story. C99 allows duplicate designated initializers - the last one wins - so a macro can expand defaults and accept overrides via `__VA_ARGS__`.
+
+```c
+typedef struct {
+  uint8_t type;
+  uint16_t address;
+  int32_t offset;
+  uint32_t interval_ms;
+  bool enabled;
+} sensor_params_t;
+
+// preferred - inline override macro
+#define SENSOR_PARAMS(...) ((sensor_params_t){ \
+  .type = SENSOR_TEMP, \
+  .address = 0x0048, \
+  .offset = 0, \
+  .interval_ms = 1000, \
+  .enabled = true, \
+  __VA_ARGS__ \
+})
+
+// one-liner inserts - only the relevant field is visible
+void test_finds_sensor_by_address(void)
+{
+  sensor_t* temp = add_sensor(&registry, &SENSOR_PARAMS(.address = 0x0048));
+  sensor_t* humidity = add_sensor(&registry, &SENSOR_PARAMS(.address = 0x0050));
+  sensor_t* pressure = add_sensor(&registry, &SENSOR_PARAMS(.address = 0x0060));
+
+  TEST_ASSERT_EQUAL(3, sensor_count(&registry));
+  TEST_ASSERT_EQUAL(humidity, find_by_address(&registry, 0x0050));
+}
+
+// multiple overrides split to lines
+void test_disabled_sensor_is_skipped_during_poll(void)
+{
+  sensor_t* sensor = add_sensor(&registry, &SENSOR_PARAMS(
+    .address = 0x0048,
+    .enabled = false
+  ));
+
+  poll_all(&registry);
+
+  TEST_ASSERT_EQUAL(0, sensor->read_count);
+}
+```
+
+Also acceptable: a struct variable with field overrides before the call.
+
+```c
+void test_finds_sensor_by_address(void)
+{
+  sensor_params_t params = DEFAULT_SENSOR_PARAMS;
+
+  params.address = 0x0048;
+  sensor_t* temp = add_sensor(&registry, &params);
+
+  params.address = 0x0050;
+  sensor_t* humidity = add_sensor(&registry, &params);
+
+  TEST_ASSERT_EQUAL(humidity, find_by_address(&registry, 0x0050));
+}
+```
 
 ---
 

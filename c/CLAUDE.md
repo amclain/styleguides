@@ -147,6 +147,8 @@ typedef struct {
 #include <string.h>
 ```
 
+AI NOTE: Agents put the module's own header first (a C++ convention). In C, standard library headers always come first. When a file has no standard library includes, the local header can appear first with no blank line needed. External libraries (like Unity's `"unity.h"`) are group 2, not group 3 - separate them from local project headers with a blank line.
+
 **When to deviate**: Some build systems or frameworks require a specific header to appear first (e.g. a precompiled header or framework umbrella header). Place that header before the groups.
 
 ---
@@ -259,11 +261,11 @@ const char* message =
 
 **Convention**: Based on K&R. Single-line function signatures get the opening brace on the next line. Control flow (`if`, `for`, `while`, `switch`, `do`) gets the opening brace on the same line. `else` and `else if` go on a new line after `}` - each control block is a clear, self-contained unit.
 
-When a function signature is too long for one line, keep the return type on the same line as the function name and split the arguments to multiple lines. Do not split the return type to its own line - always split on arguments instead. `) {` go together on the closing line - **never** `) \n{`. This is a common mistake. The closing paren and opening brace must be on the same line: `) {`. The `) {` serves the same role as `\n{` on a single-line signature - a uniform visual separator between function args and body. Putting `{` on yet another line adds too much visual gap.
+Only split function signatures to multiple lines when the single-line version exceeds 80 characters. When splitting, keep the return type on the same line as the function name and split the arguments to multiple lines. Do not split the return type to its own line - always split on arguments instead. `) {` go together on the closing line - **never** `) \n{`. This is a common mistake. The closing paren and opening brace must be on the same line: `) {`. The `) {` serves the same role as `\n{` on a single-line signature - a uniform visual separator between function args and body. Putting `{` on yet another line adds too much visual gap.
 
 AI NOTE: Agents consistently produce `)\n{` for multi-line function signatures. Always write `) {` on the closing parameter line, not `)` followed by `{` on the next line. Check your output after writing multi-line signatures.
 
-Multi-line parameters are indented one level (2 spaces) from the left margin - not aligned to the opening paren, and not at a deeper indent than the function body. One parameter per line.
+Multi-line parameters are indented one level (2 spaces) from the left margin - not aligned to the opening paren, and not at a deeper indent than the function body. One parameter per line. The same one-per-line principle applies to function call sites when they are split to multiple lines.
 
 ```c
 // good - single-line signature: brace on next line
@@ -475,6 +477,8 @@ if (index >= limit) continue;
 
 Casts follow the same principle - the `*` stays with the type inside the parens. A space separates the cast from the expression, just like a space separates a type from a variable name in a declaration.
 
+AI NOTE: Agents consistently omit the space after casts. Always write `(type) expression` with a space, not `(type)expression`.
+
 ```c
 // good
 int* values = calloc(count, sizeof(int));
@@ -554,7 +558,7 @@ Doxygen uses `@` prefix for tags (`@brief`, `@param`, `@return`), not `\`. Use `
 
 Do not use section divider comments (`// --- Public API ---`, `// --- Static helpers ---`, etc.). The code structure is defined by function ordering and `static` visibility, not decoration. See the general guide's Write Self-Documenting Code rule.
 
-AI NOTE: Agents produce section divider comments in `.c` files to separate public API from static helpers. Do not generate these - the function ordering rule already defines the structure.
+AI NOTE: Agents produce section divider comments in all file types - `.c`, `.h`, and test files. Common patterns: `// -- Public API ---`, `// -- Forward declarations ---`, `// -- Helpers ---`, `// -- Tests ---`. Do not generate any of these - code structure is defined by function ordering and `static` visibility.
 
 `/** */` is preferred over `///` for C - `///` silently breaks if one line is missing the prefix. `/** */` is also the format universally parsed by IDEs (VS Code, CLion, clangd) and compatible with all major doc generation paths (Doxygen, Sphinx via Breathe, clang-doc).
 
@@ -690,7 +694,7 @@ int total = base_value
 
 **Intent**: Visually separate variable declarations from the executable code that follows.
 
-**Convention**: Separate block-top declarations from executable statements with a blank line. A group of one-line declarations can be written together, but a multi-line expression is its own thought and gets a blank line before and after it. Exception: when a one-line declaration is directly tied to the action that follows (declaration-and-use as a single thought), the blank line is unnecessary. This is a style workaround for C's verbose grammar.
+**Convention**: Separate block-top declarations from executable statements with a blank line. A group of one-line declarations can be written together, but a multi-line expression is its own thought and gets a blank line before and after it. This applies to multi-line function calls and assertions too - adjacent multi-line statements need blank lines between them. A `return` at the end of a logical block should be separated from the preceding assignments by a blank line. Exception: when a one-line declaration is directly tied to the action that follows (declaration-and-use as a single thought), the blank line is unnecessary. This is a style workaround for C's verbose grammar.
 
 ```c
 // good - blank line after block-top declarations
@@ -1016,7 +1020,7 @@ typedef struct {
 
 **Intent**: After the initial code is written, the most likely reason someone re-reads a `.c` file is to understand how the public API works. The public functions should be up front and easy to find, not buried below internal helpers.
 
-**Convention**: Forward declarations of static functions at the top of the file, then public API functions, then static helper definitions. When forward declarations mix single-line and multi-line signatures, separate them with a blank line - the multi-line declaration is a visually distinct block.
+**Convention**: Static variables (constants, lookup tables, shared state) at the top of the file, then forward declarations of static functions, then public API functions, then static helper definitions. Variables are data the functions operate on - they should be visible before the functions that use them. When forward declarations mix single-line and multi-line signatures, separate them with a blank line - the multi-line declaration is a visually distinct block.
 
 AI NOTE: Agents default to putting static helpers first to avoid forward declarations. Always use forward declarations and place public API functions before static helpers.
 
@@ -1215,7 +1219,7 @@ void process(sensor_t* sensor)
 
 **Intent**: A header must work on its own. Consumers should not need to know which other headers to include first.
 
-**Convention**: Every header file must compile correctly when included as the first and only header in a source file. Include all types the header depends on directly - do not rely on transitive inclusions from other headers. Conversely, a `.c` file should not re-include headers already provided by its own header - the header's self-containment guarantees they are available.
+**Convention**: Every header file must compile correctly when included as the first and only header in a source file. Include all types the header depends on directly - do not rely on transitive inclusions from other headers. Conversely, a `.c` file should not re-include headers already provided by its own header - the header's self-containment guarantees they are available. However, a `.c` file must include any headers it uses directly that its own header does not provide (e.g. `<stdbool.h>` for `bool` in local variables when the header doesn't use `bool`).
 
 ```c
 // good - sensor.h includes everything it needs
@@ -2135,19 +2139,19 @@ strcpy(buffer, source);
 
 **Intent**: Use ternary for simple value selection, not for control flow.
 
-**Convention**: Use the ternary operator for simple value selection in assignments and return statements. Simple ternaries stay on one line. Nested ternaries are acceptable when formatted with each `?` and `:` on its own line, indented to show the nesting structure. Do not use ternary for side effects or complex logic.
+**Convention**: Use the ternary operator for simple value selection in assignments and return statements. Parenthesize the condition to prevent precedence bugs and add clarity. Simple ternaries stay on one line. Nested ternaries are acceptable when formatted with each `?` and `:` on its own line, indented to show the nesting structure. Do not use ternary for side effects or complex logic.
 
 ```c
 // good - simple value selection
-int max = a > b ? a : b;
-const char* label = enabled ? "on" : "off";
-return count > 0 ? count : -1;
+int max = (a > b) ? a : b;
+const char* label = (enabled) ? "on" : "off";
+return (count > 0) ? count : -1;
 
 // good - nested ternary with structured formatting
 const char* label =
-  value > 100
+  (value > 100)
   ? "high"
-  : value > 50
+  : (value > 50)
     ? "medium"
     : "low";
 
@@ -2159,6 +2163,44 @@ int result = (a > b && c != 0) ? compute(a, b) : fallback(c);
 ```
 
 **When to deviate**: Follow the existing style of a codebase.
+
+---
+
+### Unused Parameter Suppression
+
+**Intent**: Make intentionally unused parameters visible and deliberate.
+
+**Convention**: Place `(void) parameter;` at the top of the function body, before any executable code. It is metadata about the parameter - a deliberate declaration that it is intentionally unused. Buried in the middle of the function, it looks like an accidental leftover.
+
+```c
+// good - at the top, reads as a conscious decision
+static uint16_t checksum(
+  const uint8_t* header,
+  uint16_t header_length,
+  const uint8_t* payload,
+  uint16_t payload_length
+) {
+  (void) header_length;
+
+  uint8_t pseudo[12];
+  // ...
+}
+
+// avoid - buried in the middle of the function
+static uint16_t checksum(
+  const uint8_t* header,
+  uint16_t header_length,
+  const uint8_t* payload,
+  uint16_t payload_length
+) {
+  uint8_t pseudo[12];
+  // ... 10 lines of setup ...
+  (void) header_length;
+  // ...
+}
+```
+
+**When to deviate**: None.
 
 ---
 

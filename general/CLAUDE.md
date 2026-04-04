@@ -488,18 +488,21 @@ test "test_connect"
 In C test frameworks, the test name is a function identifier rather than a string. The same behavioral proposition principle applies - the function name should describe the expected behavior, not mirror the function under test.
 
 ```c
-// good - behavioral propositions as function names
-void test_sensor_read_returns_negative_on_hardware_failure(void) { ... }
-void test_sensor_read_returns_calibrated_value(void) { ... }
-void test_config_store_overwrites_existing_key(void) { ... }
+// good - behavioral propositions (module name is in the file name, not repeated)
+// in test_sensor.c:
+void test_returns_negative_on_hardware_failure(void) { ... }
+void test_returns_calibrated_value(void) { ... }
 
-// avoid - mirrors the function name, describes nothing
-void test_sensor_read(void) { ... }
-void test_config_store_set(void) { ... }
+// in test_config_store.c:
+void test_overwrites_existing_key(void) { ... }
+
+// avoid - mirrors the function under test, describes nothing
+void test_read(void) { ... }
+void test_set(void) { ... }
 
 // In Google Test, the same principle applies:
-// TEST(SensorRead, ReturnsNegativeOnHardwareFailure) { ... }
-// TEST(SensorRead, ReturnsCalibratedValue) { ... }
+// TEST(Sensor, ReturnsNegativeOnHardwareFailure) { ... }
+// TEST(Sensor, ReturnsCalibratedValue) { ... }
 ```
 
 ---
