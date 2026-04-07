@@ -1,3 +1,5 @@
+@general/collaboration.md
+
 # General Style Guide
 
 This file defines style principles that apply across all languages. Language-specific rules are in `<lang>/CLAUDE.md`.
