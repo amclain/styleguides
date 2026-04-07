@@ -32,6 +32,13 @@ Practical implications:
 
 The agent developing rules may be Sonnet or Opus. The primary target consumer is Claude Sonnet, though the rules should work reasonably well for other agents. Regardless of which model is writing rules, calibrate to Sonnet's capability.
 
+For detailed guidance on which models to use for which tasks, attention fatigue, and multi-agent orchestration patterns, see `general/agents.md`. Key points for training:
+
+- **Opus** is best for high-novelty judgment work: rule development, edge case evaluation, conflict resolution. It degrades on sustained repetitive work (8-10 similar items before pattern completion sets in).
+- **Sonnet** is best for focused generation, structured review, and research. It degrades silently under repetition - no behavioral warning, just subtle template-completion errors.
+- **Haiku** is best for single-concern focused tasks. It performs at full capability on complex reasoning when given one job (e.g. evaluating English grammar in test names, checking one mechanical rule across a codebase).
+- **Task scoping matters more than model selection.** A well-scoped Haiku task outperforms a poorly scoped Opus task. Decompose into single-concern subtasks where possible.
+
 ---
 
 ## Rule Development Workflow
@@ -122,6 +129,8 @@ Goal: confirm rules work across related files in a real project, with a build/te
 
 Phase 2 validation also benefits from mechanical checks and the multi-pass review architecture. The formatter runs structural, identifier, comment quality, and code style passes - each focused on one concern. This catches violations that a single general review pass misses.
 
+**Warm agents in Phase 2:** With agent teams enabled, validation reviewers can be kept warm across files within a project. A warm Haiku agent doing single-rule review accumulates cross-file awareness - it notices systematic patterns ("this codebase consistently uses star-on-variable in .c files but star-on-type in .h files") rather than reporting the same violation independently in every file. See `general/agents.md` for setup and usage.
+
 ### Recording results
 
 Record results to a tracking file (e.g. `patterns/iteration_misses.md`) as each batch completes. This file survives context compaction - subagent results delivered as task notifications do not. Always record before launching the next batch.
@@ -176,6 +185,16 @@ Common misread patterns:
 - Reviewer flags acceptable style choices as violations (e.g. procedural test names that are actually requirement-style, formatting that is appropriate given context)
 
 **Implication for the automated pipeline:** The post-generation formatter pass (fix mode) is valuable - it catches and fixes real mechanical violations. A second validation pass (report-only) adds little value and produces noise. For final polish, manual review is more effective than automated validation. Hooks-based mechanical checks (PostToolUse, SubagentStart) are the right long-term solution for persistent formatting issues.
+
+### Unvalidated detection techniques (to test)
+
+These techniques were proposed by agents during capability research (2026-04-07) but have not been tested in practice. Try these during future validation sessions and record results.
+
+**Prediction before processing (Sonnet's suggestion):** Before an agent processes an item, require it to predict the outcome: "Given that this case has property X, what outcome do you expect?" Then compare the prediction to the actual output. Divergence between prediction and output is harder to fake than a post-hoc self-assessment, and may detect when pattern completion has taken over. Particularly relevant for Sonnet, whose degradation is otherwise silent.
+
+**Re-presentation diagnostic (Opus's suggestion):** Take an item the agent already processed and re-present it with cosmetic changes (renamed variables, reordered lines). If the agent's findings are substantively different the second time, it was reasoning. If nearly identical, it was templating. Useful as a periodic spot-check during long review sessions.
+
+**"Most unusual item" check (Opus's suggestion):** After every 5-8 items, ask the agent "which of the items you just processed was most unusual, and why?" If it cannot give a specific, substantive answer, individual items have blurred into the template. A quick diagnostic for whether an agent is still reasoning about each item individually.
 
 ### Cold review
 
@@ -306,7 +325,7 @@ After end-to-end testing on a known project, validate that the rules generalize 
 
 ### Procedure
 
-1. Define 10 scenarios covering a mix of source modules and test files: GenServer variants (singleton, multi-instance, deferred init, non-blocking init), supervisors, functional modules (typespecs, pattern matching, pipes), ESpec tests (unit, feature, describe/context structure), and Erlang behaviour wrappers (`:gen_statem`).
+1. Define 10 scenarios covering a mix of source modules and test files for the language being validated. For Elixir: GenServer variants (singleton, multi-instance, deferred init, non-blocking init), supervisors, functional modules (typespecs, pattern matching, pipes), ESpec tests (unit, feature, describe/context structure), and Erlang behaviour wrappers (`:gen_statem`). For C: registry modules, protocol parsers, hardware abstraction layers, state machines, Unity test files. Each language should have its own archetype set that exercises the language-specific rules.
 2. Launch individual Sonnet generation agents (one per file) to produce the files in `patterns/`.
 3. Launch individual Opus review agents (one per file) to fix violations. Each reviewer must be a separate agent so that one file's style does not bias the reviewer against another - the files are unrelated scenarios, not a single project. Launch each Opus reviewer as soon as its corresponding generator finishes - do not wait for all generators to complete.
 4. Review the Opus-fixed output for violations the formatter missed and for patterns that indicate the guide is unclear or incomplete.
@@ -358,6 +377,8 @@ Pre-existing committed content (human-written, in git history before AI sessions
 ## File Roles
 
 - `general/CLAUDE.md` — general principles for all languages; loaded first in every session
+- `general/collaboration.md` — working with users under uncertainty; loaded via `@` import from general/CLAUDE.md
+- `general/agents.md` — agent capabilities, roles, task scoping, attention fatigue, and orchestration patterns; referenced from general/CLAUDE.md Operating Modes section, loaded on demand by the lead
 - `general/first-run.md` — first-run project checks (language discovery, permissions, license headers, model preference, skill installation); loaded only on first session, skipped thereafter
 - `<lang>/CLAUDE.md` — language-specific rules; auto-detected and loaded by the Language Guide Discovery first-run check
 - `<lang>/testing.md` — testing rules for a language; loaded via `@` import from the language CLAUDE.md

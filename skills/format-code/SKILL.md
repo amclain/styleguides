@@ -33,7 +33,7 @@ If invoked with `--all`, review the entire codebase.
 3. Run mechanical checks on the changed files (see below) - these find patterns that are difficult to detect by reading code
 4. Read each changed file
 
-The following passes are distinct review concerns. Each pass focuses on one cognitive mode. For small diffs, a single agent runs all passes sequentially. For large diffs or `--all` reviews, each pass should be a separate cold agent reporting to the orchestrator, which resolves conflicts and applies fixes. Dedicated reviewers catch issues that a general reviewer misses because they have no competing concerns.
+The following passes are distinct review concerns. Each pass focuses on one cognitive mode. For small diffs, a single agent runs all passes sequentially. For large diffs or `--all` reviews, each pass should be a separate cold agent reporting to the orchestrator, which resolves conflicts and applies fixes. See `general/agents.md` for guidance on which model to use for each pass based on attention requirements. Dedicated reviewers catch issues that a general reviewer misses because they have no competing concerns.
 
 5. **Structural pass** - verify file-level structure before examining code:
    - Header file ordering: `#pragma once` → includes → `#define` constants → type definitions → function declarations. All `#define` constants must appear above all `typedef enum`/`typedef struct` definitions.
@@ -100,7 +100,7 @@ grep -Pn 'memset\(.*0.*sizeof' <file>
 grep -Pn '[+\-*/|&] *$' <file>
 ```
 
-These checks catch patterns that Opus consistently misses when reading code. Not every match is a violation - for example, a long string literal exceeding 80 chars may be intentional per the String Literals rule. The pointer style check may match `*const` which is an intentional exception.
+These checks catch patterns that all models miss when reading code - both from training data blind spots and from attention fatigue on repetitive review tasks. Mechanical checks do not degrade under repetition, making them a reliable complement to AI review. Not every match is a violation - for example, a long string literal exceeding 80 chars may be intentional per the String Literals rule. The pointer style check may match `*const` which is an intentional exception.
 
 ## Important
 

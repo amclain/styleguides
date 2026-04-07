@@ -130,11 +130,17 @@ This mirrors how a human reviewer works on a pull request: reads surrounding cod
 ```
 general/
   CLAUDE.md          # General style principles applying to all languages
+  collaboration.md   # Working with users under uncertainty (loaded via @ import)
+  agents.md          # Agent capabilities, roles, scoping, and fatigue (loaded on demand)
   first-run.md       # First-run project checks (loaded once, skipped thereafter)
+c/
+  CLAUDE.md          # C style rules (source of truth, AI-friendly)
+  testing.md         # C testing rules (loaded via @ import from c/CLAUDE.md)
+  README.md          # Human-readable rendering
 elixir/
   CLAUDE.md          # Elixir style rules (source of truth, AI-friendly)
   testing.md         # Elixir testing rules (loaded via @ import from elixir/CLAUDE.md)
-  README.md          # Human-readable rendering, no AI notes
+  README.md          # Human-readable rendering
 ruby/
   CLAUDE.md          # Ruby style rules
   style.rb           # Existing human-written style guide (referenced by CLAUDE.md)

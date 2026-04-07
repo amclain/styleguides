@@ -14,13 +14,15 @@ This file defines style principles that apply across all languages. Language-spe
 
 ## Operating Modes
 
-This style guide supports two modes. The agent determines the active mode from context (the user's request, the trigger phrase, or the task at hand). Check memory for the user's model preferences for each mode - see `general/first-run.md`.
+This style guide supports two modes. The agent determines the active mode from context (the user's request, the trigger phrase, or the task at hand). Check memory for the user's model preferences for each mode - see `general/first-run.md`. For guidance on which models to use for which tasks, agent roles, and multi-agent orchestration, see `general/agents.md`.
 
 ### Code Generation
 
-Use Sonnet for code generation. Generation quality is the same across models - style violations during generation are training data biases that affect all models equally. Opus is slower and more expensive for generation with no quality benefit.
+Sonnet is the default for code generation. Code logic and correctness are equivalent across models - Sonnet writes the same algorithms and data structures as Opus. Opus produces fewer style violations during generation because it holds more rules active simultaneously, but the post-generation review pass catches these regardless of which model generated the code. Sonnet is faster and lower cost for generation, with the known style blind spots handled by the review step.
 
-**If the current session is running Opus and code generation is requested:** before writing any code, ask the user to switch to Sonnet (e.g. via `/model` in Claude Code). Do not start generating code with Opus until the user explicitly confirms they want to proceed with Opus. This prompt happens once per session - save the user's decision to memory.
+The generating agent cannot accurately review its own code due to context bias from the generation phase. This is the primary reason generation and review are separate agents, not a quality difference between models.
+
+**If the current session is running Opus and code generation is requested:** inform the user once that Sonnet produces equivalent code logic at lower cost, and that style compliance is handled by the review pass. Ask the user to confirm before proceeding with Opus generation. Save their decision to memory so this prompt is not repeated.
 
 When generating new code, apply the rules in this guide and the loaded language guide proactively. Do not wait to be asked.
 
