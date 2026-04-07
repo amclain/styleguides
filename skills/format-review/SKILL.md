@@ -48,11 +48,20 @@ Do not explain reasoning unless the user asks. The user can:
 2. Identify changed files via `git diff --name-only` and `git diff --staged --name-only`
 3. Run mechanical checks on the changed files (see the format-code skill for the checklist) - these find patterns that are difficult to detect by reading code
 4. Read each changed file
-5. Review each mechanical check result against the style rules - not every match is a violation, use judgment
-6. Identify additional style violations by reading the code
-7. Present the numbered list (mechanical findings + reading findings combined)
-8. Wait for user input
-9. Apply requested changes using the Edit tool
+
+The following passes are distinct review concerns (see format-code skill for full details on each). For small diffs, run all passes sequentially. For large diffs or `--all` reviews, each pass should be a separate cold agent reporting to the orchestrator.
+
+5. **Structural pass** - file-level ordering and grouping (see format-code for full checklist)
+6. **Mechanical check review** - evaluate grep/awk results against style rules
+7. **Identifier scan** - apply the detokenize technique from the general guide's Precision Over Length rule to detect abbreviations and grammar problems
+8. **Comment quality pass** - redundant comments, comments-as-names signals, "what" comments that should be "why". When a comment explains what a literal value represents, the representation is wrong - flag the representation, not just the comment.
+9. **Code style pass** - line-level formatting, whitespace, idioms, brace placement
+
+After all passes:
+
+10. Present the numbered list (all findings combined, grouped by pass)
+11. Wait for user input
+12. Apply requested changes using the Edit tool
 
 ## Important
 

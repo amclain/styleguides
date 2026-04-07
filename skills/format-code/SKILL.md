@@ -32,12 +32,29 @@ If invoked with `--all`, review the entire codebase.
 2. Identify changed files via `git diff --name-only` and `git diff --staged --name-only`
 3. Run mechanical checks on the changed files (see below) - these find patterns that are difficult to detect by reading code
 4. Read each changed file
-5. Review each mechanical check result against the style rules - not every match is a violation, use judgment
-6. Identify additional style violations by reading the code
-7. Fix each confirmed violation using the Edit tool
-8. After all fixes, run the project's test suite
-9. If tests fail, diagnose and fix - style corrections must not change behavior
-10. Report a summary of changes (file, rule, what was fixed)
+
+The following passes are distinct review concerns. Each pass focuses on one cognitive mode. For small diffs, a single agent runs all passes sequentially. For large diffs or `--all` reviews, each pass should be a separate cold agent reporting to the orchestrator, which resolves conflicts and applies fixes. Dedicated reviewers catch issues that a general reviewer misses because they have no competing concerns.
+
+5. **Structural pass** - verify file-level structure before examining code:
+   - Header file ordering: `#pragma once` → includes → `#define` constants → type definitions → function declarations. All `#define` constants must appear above all `typedef enum`/`typedef struct` definitions.
+   - `.c` file ordering: includes → `#define` constants → static variables → forward declarations of static functions → public API functions → static helper definitions.
+   - Test file ordering: includes → static variables/helpers → `setUp`/`tearDown` → test functions.
+   - Include grouping: system headers, then library headers, then project headers, separated by blank lines.
+6. **Mechanical check review** - review each mechanical check result against the style rules. Not every match is a violation - use judgment.
+7. **Identifier scan** - for non-trivial identifiers in changed code, apply the detokenize technique from the general guide's Precision Over Length rule: split identifiers into words and read as an English phrase. This catches abbreviations and grammar problems that are invisible when reading identifiers as code tokens. For languages with namespace prefixes (C), strip the prefix first.
+8. **Comment quality pass** - review comments for:
+   - Redundant comments that restate what the code already expresses (e.g. `// 5 bytes` on an array whose `sizeof` is used at the call site)
+   - Comments explaining a value that signal the value should be a named constant instead (e.g. `0x02, // SYN` - the comment is doing the constant's job)
+   - Comments describing what the code does rather than why (covered by the general guide's "Write Self-Documenting Code" rule)
+   - When a comment explains what a literal value represents (e.g. `0x02, // SYN` or `{0x48, 0x65} // "He"`), fix the representation first (named constant, char literal, etc.), then remove the comment. Do not remove the comment without fixing the representation - that leaves the value both unreadable and unexplained.
+9. **Code style pass** - identify style violations by reading the code: formatting, whitespace, idioms, line breaks, brace placement, and all other line-level rules.
+
+After all passes:
+
+10. Fix each confirmed violation using the Edit tool
+11. Run the project's test suite
+12. If tests fail, diagnose and fix - style corrections must not change behavior
+13. Report a summary of changes (file, rule, what was fixed)
 
 ## Mechanical Checks
 
@@ -74,7 +91,13 @@ grep -Pn '\w\(\)\s*[{;]' <file>
 grep -Pn '}\s*else' <file>
 
 # Prohibited abbreviations in variable/constant names
-grep -Pn '\bbuf\b|\blen\b|\bmsg\b' <file>
+grep -Pn '\bbuf\b|\blen\b|\bmsg\b|\bsrc_\b|\bdst_\b' <file>
+
+# memset at declaration (should use = { 0 } instead)
+grep -Pn 'memset\(.*0.*sizeof' <file>
+
+# Operator at end of line (should be at start of continuation)
+grep -Pn '[+\-*/|&] *$' <file>
 ```
 
 These checks catch patterns that Opus consistently misses when reading code. Not every match is a violation - for example, a long string literal exceeding 80 chars may be intentional per the String Literals rule. The pointer style check may match `*const` which is an intentional exception.

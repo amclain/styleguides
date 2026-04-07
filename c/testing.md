@@ -36,17 +36,52 @@ test/feature_reading_pipeline_test.cc feature test
 
 Unity discovers test functions by name. Each test function is `void test_<description>(void)`. Since C function names cannot contain spaces, the name is the behavioral specification in `snake_case`.
 
-Use the pattern `test_<action_or_property>_when_<condition>` or `test_<condition>_<expected_outcome>`. The module name is already in the file name - don't repeat it in every test function name.
+The name is the specification - it should read as a behavioral proposition. A test name answers "what behavior does this prove exists?", not "what function does this call?"
+
+The module name is already in the file name - don't repeat it in every test function name.
+
+**Evaluating a test name.** Apply the detokenize technique from the general guide: strip `test_`, replace underscores with spaces, and read the result as English. Then apply the litmus test: can you say "it [name]" and have a complete sentence?
+
+- `test_returns_calibrated_value` → "it returns calibrated value" - complete proposition
+- `test_read_sensor` → "it read sensor" - imperative, not a proposition
+- `test_capacity_limit` → "it capacity limit" - noun phrase, no verb
+- `test_value_preserved` → "it value preserved" - missing auxiliary verb ("is preserved")
+
+**Three questions for finding the right name:**
+
+1. **"Can I say 'it [name]' and have a complete sentence?"** Catches grammar problems: missing verbs, bare noun phrases, imperative mood. If the answer is no, the name needs a verb or restructuring.
+
+2. **"What behavior does this prove exists?"** Derive the name from the assertion, not the function being called. The assertion is what the test proves. `TEST_ASSERT_NULL(result)` after a lookup → `test_removed_sensor_is_not_found`. Do not name it `test_remove_sensor` - that names the action, not the outcome.
+
+3. **"Why does this matter to the system?"** Finds the precise name when the current one is generic. "valid" and "correct" say nothing. Ask why validity matters and name that: `test_reading_valid` → why? → out-of-range readings are discarded during calibration → `test_discards_reading_outside_calibration_range`.
+
+**Active voice by default.** Active voice names the actor and the action. Passive voice buries the actor. Use passive only when the subject's capability is the point.
 
 ```c
-// good - behavioral propositions
+// good - active voice, behavioral propositions
 void test_returns_calibrated_value(void) { ... }
 void test_returns_error_when_not_initialized(void) { ... }
-void test_returns_null_when_sensor_not_found(void) { ... }
-void test_checksum_matches_for_valid_reading(void) { ... }
+void test_discards_reading_outside_calibration_range(void) { ... }
+void test_finds_sensor_by_address(void) { ... }
+void test_does_not_poll_disabled_sensor(void) { ... }
 
-// avoid - mirrors code structure, describes nothing
+// good - passive voice when the subject's capability is the point
+void test_sensor_can_be_removed(void) { ... }
+
+// good - "when" clause for boundary/conditional tests
+void test_returns_null_when_sensor_not_found(void) { ... }
+void test_skips_poll_when_registry_is_full(void) { ... }
+
+// good - tautological name is correct when the API name is a proposition
+void test_enabled_sensor_is_enabled(void) { ... }
+// "enabled sensor" is the setup, "is_enabled" is the API function
+
+// avoid - mirrors code structure
 void test_read_sensor(void) { ... }
+void test_parse_config(void) { ... }
+
+// avoid - bare noun phrase, no verb
+void test_registry_capacity(void) { ... }
 void test_sensor_init(void) { ... }
 
 // avoid - repeats module name from file
@@ -57,7 +92,7 @@ void test_sensor_returns_calibrated_value(void) { ... }  // in test_sensor.c
 // TEST(Sensor, ReturnsErrorWhenNotInitialized) { ... }
 ```
 
-Test names can be long. A descriptive 60-character function name is better than a cryptic 20-character one. The name is the specification - it should read as a behavioral proposition.
+Test names can be long. A descriptive 60-character function name is better than a cryptic 20-character one.
 
 ---
 
@@ -65,7 +100,7 @@ Test names can be long. A descriptive 60-character function name is better than 
 
 Unity calls `setUp()` before each test and `tearDown()` after each. Use them for state that every test in the file needs. Keep them short - if setUp is doing complex multi-step initialization, the tests may be at the wrong level of abstraction or the file covers too many concerns.
 
-Only define `setUp` and `tearDown` when there is work to perform. An empty `setUp` or `tearDown` is noise.
+Unity requires both `setUp` and `tearDown` to be defined - the linker expects both symbols even when one is empty. Define both, but keep empty implementations minimal: `void tearDown(void) {}`.
 
 Place `setUp` and `tearDown` after static variables and helper functions, just before the first test function. They may reference static helpers or variables, so those must be defined above them.
 
@@ -189,6 +224,10 @@ TEST_ASSERT_EQUAL_INT(-1, error);
 
 When test helpers take many arguments, most of which are boilerplate defaults, use a params struct with a default initializer macro. Tests override only the fields that matter to their story. C99 allows duplicate designated initializers - the last one wins - so a macro can expand defaults and accept overrides via `__VA_ARGS__`.
 
+The function under test should accept the params struct directly. Do not create intermediate wrapper functions that unpack the struct back into positional arguments - change the function signature to take `const type*` instead.
+
+When you see repeated struct-then-override patterns in test code (`opts = defaults(); opts.field = value;`), apply the macro pattern. It collapses multi-line setup blocks into a single expression that reads as "default with these overrides."
+
 ```c
 typedef struct {
   uint8_t type;
@@ -249,6 +288,16 @@ void test_finds_sensor_by_address(void)
   TEST_ASSERT_EQUAL(humidity, find_by_address(&registry, 0x0050));
 }
 ```
+
+---
+
+### Don't Test Dependency Contracts
+
+Do not write tests for defensive checks against failures in dependencies - the OS, runtime, libraries, or any other code your project depends on. Each dependency is responsible for validating its own behavior. If a library guarantees a return type, the OS guarantees a complete delivery, or a framework guarantees initialization order, testing those guarantees tests the dependency, not your code.
+
+This extends the general principle "only validate at system boundaries." Dependency guarantees are not a system boundary the application crosses - they are the floor the application stands on. A test for "what if the library returned the wrong type" when the library's own tests guarantee the type is testing a scenario that cannot happen under the dependency's contract.
+
+**When to deviate**: When your code explicitly handles dependency errors as part of its contract (e.g. a retry layer that handles `EAGAIN`, or a wrapper that translates library errors into domain errors), testing those paths is testing your code, not the dependency.
 
 ---
 

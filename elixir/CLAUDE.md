@@ -169,7 +169,7 @@ defmodule MyApp.Protocol.Parser do
 end
 ```
 
-AI NOTE: After writing a module header that has both `@type`/`@typedoc` and module-level constants (`@name value`), verify the types appear first. This is the most common ordering mistake - the natural impulse is to define constants before types, but the rule requires types first because they are public API.
+CAUTION: After writing a module header that has both `@type`/`@typedoc` and module-level constants (`@name value`), verify the types appear first. The natural impulse is to define constants before types, but the rule requires types first because they are public API.
 
 Each directive type is its own group — a blank line is required between them even when only a single directive is present in each group:
 
@@ -788,7 +788,7 @@ data
 |> Enum.sum()
 ```
 
-AI NOTE: Agents consistently add `()` to terminal pipe calls like `Repo.all()`, `Repo.insert()`, `Repo.one()`, `Enum.sum()`, `:binary.bin_to_list()`. These are all one-arity in the pipe (receiving the piped value as their single argument). The `()` must be removed. Parens are only needed when passing additional arguments beyond the piped value.
+Do not add `()` to terminal pipe calls like `Repo.all()`, `Repo.insert()`, `Repo.one()`, `Enum.sum()`, `:binary.bin_to_list()`. These are all one-arity in the pipe (receiving the piped value as their single argument). The `()` must be removed. Parens are only needed when passing additional arguments beyond the piped value.
 
 ---
 
@@ -953,7 +953,7 @@ When discussing these concepts in documentation or comments, follow the general 
 
 `start_link/1` is always first - it is the public API for starting the process. Public API functions come next, followed by callbacks, then private helpers at the bottom. No callback clause may appear after private helpers - all callbacks must be grouped together above the private section.
 
-AI NOTE: Agents sometimes add a callback clause as an afterthought at the bottom of the file, after private helpers. This is incorrect. If a new callback clause is needed, place it with the other clauses of the same callback function, not at the end of the file.
+Do not add a callback clause at the bottom of the file after private helpers. If a new callback clause is needed, place it with the other clauses of the same callback function, not at the end of the file.
 
 **Callback order**: `init`, `handle_continue`, `terminate`, `handle_call`, `handle_cast`, `handle_info`. `handle_continue` stays near `init` because it is the continuation of initialization. `terminate` is the lifecycle bookend to `init`. The `handle_*` callbacks follow in call/cast/info order. Mixing callback types (e.g. a `handle_call` clause between `handle_info` clauses) causes compiler warnings.
 
@@ -969,7 +969,7 @@ def init(args), do: {:ok, args}
 def init(args), do: {:ok, args}
 ```
 
-AI NOTE: Agents frequently use `@impl true` instead of `@impl GenServer` (or the appropriate behaviour module). This was the single largest violation category in end-to-end testing (15 instances in one run). Always use the module name, never `true`.
+Do not use `@impl true` - always use `@impl GenServer` (or the appropriate behaviour module). Always name the behaviour module, never use `true`.
 
 Mark every callback clause with `@impl`, even when multiple clauses share the same function name. If one clause is later deleted, the `@impl` annotation remains on the surviving clauses.
 
@@ -1515,7 +1515,7 @@ In private or internal modules (`@moduledoc false`), `@typedoc` is not needed - 
 @type cache :: MapSet.t(String.t)
 ```
 
-AI NOTE: This is the most persistent generation and review error. Both generators and reviewers miss this rule. When reviewing code, scan every `@type` and `@spec` line character by character for empty parentheses. Common misses in `@spec`: `Reading.t()`, `String.t()`, `integer()`, `map()`, `float()`, `Ecto.Changeset.t()`, `filter_opts()`, `binary()`. Every `()` after a type name that takes no arguments is wrong. The ONLY parens in typespecs should be on types that take arguments (e.g. `list(atom)`).
+CAUTION: When reviewing code, scan every `@type` and `@spec` line for empty parentheses. Common misses: `Reading.t()`, `String.t()`, `integer()`, `map()`, `float()`, `Ecto.Changeset.t()`, `filter_opts()`, `binary()`. Every `()` after a type name that takes no arguments is wrong. The ONLY parens in typespecs should be on types that take arguments (e.g. `list(atom)`).
 
 Long union types broken across lines with `|` at the start of each continuation, indented two spaces. Name the primary struct type `t`.
 
@@ -1554,7 +1554,7 @@ Long union types broken across lines with `|` at the start of each continuation,
 
 For stateful modules, use a bare atom list in `defstruct` — do not initialize fields. Initialize state at runtime, where the struct is instantiated. This applies to GenServer, `gen_statem`, and any other OTP behaviour that manages state through a `State` struct. Keeping initialization out of `defstruct` ensures state is always set up explicitly in one place, rather than silently relying on struct defaults.
 
-AI NOTE: Agents consistently initialize fields in `defstruct` for stateful modules (e.g. `defstruct outputs: %{}, retries: 0`). This is one of the most frequent misses. For any module that manages OTP state, all fields in `defstruct` must be bare atoms (`:field_name`). Defaults like `%{}`, `0`, `[]`, `nil`, `false` belong in `init/1`, not `defstruct`.
+For any module that manages OTP state, all fields in `defstruct` must be bare atoms (`:field_name`). Do not initialize fields (e.g. `defstruct outputs: %{}, retries: 0`). Defaults like `%{}`, `0`, `[]`, `nil`, `false` belong in `init/1`, not `defstruct`.
 
 For GenServer, initialize state in `init/1`. When initialization involves work that could block the supervision tree, defer it to `handle_continue/2` - see **Deferred Initialization**.
 
@@ -1650,7 +1650,7 @@ Use atom shorthand syntax when all keys are atoms. Use rocket syntax when any ke
 
 When a list, map, or struct spans multiple lines, put each element on its own line with a trailing comma. Opening bracket stays on the same line as the assignment. Closing bracket on its own line.
 
-AI NOTE: Trailing commas are valid in collections (lists, maps, structs, keyword lists) but NOT in function argument lists. When reformatting a function call across multiple lines, do not add a trailing comma after the last argument - this is a syntax error in Elixir. The distinction: `[a, b,]` is valid (list), `foo(a, b,)` is not (function call).
+Trailing commas are valid in collections (lists, maps, structs, keyword lists) but NOT in function argument lists. Do not add a trailing comma after the last argument in a function call - this is a syntax error in Elixir. The distinction: `[a, b,]` is valid (list), `foo(a, b,)` is not (function call).
 
 ```elixir
 # good

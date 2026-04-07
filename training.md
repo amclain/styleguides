@@ -4,6 +4,18 @@ This file documents the process for developing and validating rules in this styl
 
 ---
 
+## Training Status
+
+| Language | Phase | Notes |
+|----------|-------|-------|
+| C | Phase 2 (project training) | Rules complete. First project validation run done. Google Test conventions TBD. |
+| Elixir | Phase 2 (project training) | Rules complete. First project validation run done. |
+| Rust | Not started | Next language in priority order. |
+| TypeScript | Not started | Covers JavaScript (superset, one guide). |
+| Ruby | Not started | |
+
+---
+
 ## Target Runtime Agent
 
 Rules in this system are applied at runtime during code generation and style review. The consuming agent may be a cloud model (Claude Sonnet, GPT-4, etc.) or a local model (Qwen 2.5 Coder, DeepSeek Coder, etc.). **Optimize for Claude Sonnet as the primary consumer.** Cater to other agents when it is reasonable to do so without compromising the rules for Sonnet.
@@ -51,34 +63,64 @@ When reviewing candidate rules extracted from source material (books, style guid
 
 ---
 
+## Training Agent Role
+
+The training agent (you) develops rules, launches validation agents, and evaluates results. You are not a formatter or reviewer - you orchestrate them. Skill files like `format-code/SKILL.md` and `format-review/SKILL.md` are instruction sets for the agents you launch, not instructions for you.
+
+Each agent reports a summary in its final text response: what it found, what it fixed, and what it considered but decided was not a violation. This summary arrives as the task notification result. The training agent does not parse agent output files - it reads the summary from the notification. Record results to a tracking file (e.g. `patterns/validation_results.md`) as agents complete. The formatter agents fix code; the training agent fixes the guide.
+
+### Training phases
+
+Training has two phases with different validation strategies:
+
+**Phase 1: Rule training.** When training on a new language, there are many rules to codify. Generate a high number (~10 per batch) of non-trivial code examples as individual files, each exercising different rules. Launch one cold agent per file. The files are unrelated scenarios - context from one file biases the review of another, so per-file agents avoid contamination.
+
+**Phase 2: Project training.** Once the rules are codified, test how they apply across files and unit tests in a real project. Generate 3-4 full project examples, each with several source files and tests that build and run. Launch one cold agent per project. This matches how a real agent experiences the project - reviewing related files with shared context. The agent runs the test suite after making changes, catching bugs that standalone file review cannot (broken renames, removed symbols, type mismatches).
+
+This is distinct from a production project where a single review agent reviews all files for a given task, because production files are related work and shared context is always useful.
+
+---
+
 ## Validation
 
-After rules are written, validate that the target runtime agent (Sonnet) actually follows them when generating code. Validation uses consensus filtering to separate real rule misses from reviewer noise.
+Validation strategies differ between training phases. Both phases use **separate generate and review agents** - a single agent that generates and reviews its own code has contaminated context.
 
-### Setup
+### Phase 1 validation (rule training)
 
-Use **separate generate and review agents**. A single agent that generates and reviews its own code has contaminated context - it knows what it wrote and why, producing the same blind spots that caused the miss.
+Goal: confirm agents follow the rules when generating and reviewing individual files.
+
+**Sonnet consensus (generation + review):**
 
 1. Choose file archetypes that exercise the rules being validated (e.g. GenServer module, Supervisor, ESpec test, Phoenix context).
 2. Launch **1 Sonnet generate agent** per archetype. Write the generated code to `patterns/` files.
 3. Launch **3 independent Sonnet review agents** per file. Each reads the generated code and the style guides cold, lists violations only. Agents have no access to each other's findings.
 
-### Consensus filtering (Sonnet - 3 reviewers)
-
+Consensus filtering (3 reviewers):
 - **3/3 agreement** - confirmed finding. The rule is consistently missed. Candidate for strengthening.
 - **2/3 agreement** - strong signal. Add to watch list or promote if corroborated by other files.
 - **1/3 agreement** - noise. Filter out. Sonnet reviewers have a non-trivial false positive rate (misreading code, flagging non-issues). Consensus filtering catches these reliably.
 
 Always verify findings against the actual code. Reviewers (both Sonnet and Opus) occasionally misread code - claiming violations exist when they don't, or claiming code is clean when it isn't.
 
-### Opus validation pass
+**Opus validation pass (after Sonnet is refined):**
 
-After Sonnet training is complete, run an Opus validation pass to confirm:
+Once Sonnet consensus has stabilized and rules are strengthened, run an Opus validation pass:
 1. Opus reliably catches all rules (it should, being the recommended review model).
-2. AI NOTEs added for Sonnet didn't cause Opus to apply rules mechanically instead of using judgment.
+2. CAUTION callouts added for Sonnet didn't cause Opus to apply rules mechanically instead of using judgment.
 3. No regressions from rule updates.
 
-Use **2 Opus reviewers per file**. Agreement = confirmed. Disagreement = investigate. Opus has much lower noise than Sonnet, so 3-reviewer consensus filtering is unnecessary. Review the same generated code as Sonnet for direct comparison.
+Use **1-2 Opus reviewers per file**. The training agent validates each finding against the actual code. Opus has lower noise than Sonnet, so 3-reviewer consensus is unnecessary, but Opus reviewers still misread code and fabricate evidence. Every finding must be verified.
+
+### Phase 2 validation (project training)
+
+Goal: confirm rules work across related files in a real project, with a build/test step that catches mechanical errors.
+
+1. Generate 3-4 buildable project examples (see Validation Projects below).
+2. Launch **1 Opus formatter agent per project** in fix mode. The agent reads the style guide, reviews all files, fixes violations, and runs the test suite.
+3. The training agent verifies tests pass after the formatter's changes. If tests fail, this reveals guide bugs (e.g. a rule that breaks the build) or formatter bugs (e.g. incomplete renames).
+4. The training agent reviews the formatter's summary for missed violations and false positives.
+
+Phase 2 validation also benefits from mechanical checks and the multi-pass review architecture. The formatter runs structural, identifier, comment quality, and code style passes - each focused on one concern. This catches violations that a single general review pass misses.
 
 ### Recording results
 
@@ -99,7 +141,7 @@ The tracking file uses consensus tables per file:
 
 After all files are validated, compile findings into two lists:
 
-- **Confirmed patterns (strengthen)** - 3/3 consensus or consistent misses across multiple files. These need AI NOTEs, stronger examples, or restructured rule text.
+- **Confirmed patterns (strengthen)** - 3/3 consensus or consistent misses across multiple files. These need stronger rule text (fold the warning into the convention), CAUTION callouts for verification techniques, stronger examples, or restructured rule text.
 - **Watch list** - 2/3 consensus or isolated misses. Collect more data before changing the guide. 2/3 items are reviewer-catch targets, not necessarily generator fixes.
 
 ### What works for strengthening rules
@@ -107,7 +149,7 @@ After all files are validated, compile findings into two lists:
 Ranked by effectiveness (most to least):
 
 1. **WRONG/RIGHT examples** - concrete side-by-side showing the anti-pattern and the fix. Most effective mechanism. Use realistic code matching the exact patterns agents produce.
-2. **AI NOTE self-check** - "after writing X, verify Y." Works when combined with examples. Effective for ordering rules where the agent needs to review its own output.
+2. **CAUTION self-check** - "after writing X, verify Y." Works when combined with examples. Effective for ordering rules where the agent needs to review its own output. Use `CAUTION:` prefix for verification techniques and diagnostic tips. Fold "don't do X" warnings directly into the convention text instead.
 3. **Frontloading** - putting the key constraint first in the rule, before the details. Effective when the rule text buries the important part.
 4. **Clearer labels** - disambiguating vague terms so the agent can distinguish categories (e.g. "Module attributes" is ambiguous when everything starting with `@` is technically a module attribute).
 5. **Prose-only strengthening** - adding emphasis, bold text, or rephrasing without examples. Least effective alone. Use only in combination with examples.
@@ -280,6 +322,19 @@ This catches issues the end-to-end test misses because the end-to-end test is a 
 
 Clean up `patterns/` after review is complete.
 
+### Validation projects
+
+Validation scenarios should be buildable projects with test suites, not standalone files. This allows the formatter agent to run tests after making changes, catching bugs like incomplete renames or removed symbols that break the linker.
+
+Each validation project is a self-contained project in `patterns/validation/`:
+
+- **C projects** use Unity (`~/workspace/unity`) with a Makefile. `make test` compiles and runs all tests.
+- **Elixir projects** use Mix with ESpec. `mix espec` runs all specs.
+
+One formatter agent per project. The agent receives the project directory and the build/test command. After all style fixes, the agent runs the test command. If tests fail, the agent diagnoses and fixes - this is part of the validation, not a failure of the process.
+
+Subagents may lack Bash permissions for the test command. When this happens, the training agent runs the tests manually and reports results. Note this limitation when evaluating the formatter's output.
+
 ---
 
 ## Example Audit
@@ -306,7 +361,7 @@ Pre-existing committed content (human-written, in git history before AI sessions
 - `general/first-run.md` — first-run project checks (language discovery, permissions, license headers, model preference, skill installation); loaded only on first session, skipped thereafter
 - `<lang>/CLAUDE.md` — language-specific rules; auto-detected and loaded by the Language Guide Discovery first-run check
 - `<lang>/testing.md` — testing rules for a language; loaded via `@` import from the language CLAUDE.md
-- `<lang>/README.md` — human-readable rendering of the language rules; derived from CLAUDE.md; AI NOTEs excluded
+- `<lang>/README.md` — human-readable rendering of the language rules; derived from CLAUDE.md; CAUTION callouts excluded
 - `skills/format-code/SKILL.md` — autonomous formatter skill; fixes violations, runs tests, reports changes. Copied to project's `.claude/skills/` during first-run
 - `skills/format-review/SKILL.md` — interactive review skill; presents violations as numbered suggestions, user decides which to apply. Copied to project's `.claude/skills/` during first-run
 - `skills/update-styleguide/SKILL.md` — pulls latest style guide from remote; re-copies skills after update. Copied to project's `.claude/skills/` during first-run
@@ -320,12 +375,12 @@ Each language directory has a `README.md` that is the human-readable rendering o
 
 ### What to exclude
 
-- AI NOTEs (HTML comments) - these are agent-facing implementation guidance
+- CAUTION callouts - these are agent-facing verification techniques and diagnostic tips
 - Internal caching hints, first-run check details, and other agent-specific instructions
 
 ### What to promote
 
-Some AI NOTEs contain information that is equally valuable to human readers. When generating the README, promote these to visible content rather than excluding them. Indicators that an AI NOTE should be promoted:
+Some CAUTION callouts contain information that is equally valuable to human readers. When generating the README, promote these to visible content rather than excluding them. Indicators that a CAUTION should be promoted:
 
 - The note describes a failure mode that is confusing to diagnose (e.g. misleading error messages)
 - The note explains a language gotcha that applies regardless of whether the reader is human or AI
@@ -333,4 +388,4 @@ Some AI NOTEs contain information that is equally valuable to human readers. Whe
 
 ### Known items to promote
 
-- **Elixir `self()` capture pattern** (`elixir/testing.md`): the AI NOTE explains that `self()` inside a `quote` block resolves to the GenServer's pid, not the test process. The resulting `FunctionClauseError` in `handle_info` is completely misleading - it points at the source module, not the test. This is equally confusing for humans and must appear in the human-readable docs.
+- **Elixir `self()` capture pattern** (`elixir/testing.md`): the rule explains that `self()` inside a `quote` block resolves to the GenServer's pid, not the test process. The resulting `FunctionClauseError` in `handle_info` is completely misleading - it points at the source module, not the test. This is equally confusing for humans and must appear in the human-readable docs.

@@ -102,8 +102,8 @@ Detect the language from context: file extension, syntax, or what the user state
 
 Each language directory maintains two files:
 
-- **`CLAUDE.md`** — source of truth. AI-friendly. May contain AI NOTEs and implementation guidance not intended for human readers.
-- **`README.md`** — human-readable rendering of the same rules. AI NOTEs and internal guidance are excluded. Rendered automatically by GitHub when browsing the directory.
+- **`CLAUDE.md`** — source of truth. AI-friendly. May contain CAUTION callouts and implementation guidance not intended for human readers.
+- **`README.md`** — human-readable rendering of the same rules. CAUTION callouts and internal guidance are excluded. Rendered automatically by GitHub when browsing the directory.
 
 `CLAUDE.md` is authoritative. `README.md` is derived and should be regenerated whenever `CLAUDE.md` changes.
 

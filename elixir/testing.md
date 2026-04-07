@@ -52,7 +52,7 @@ defmodule MyApp.Parser.Test do
 end
 ```
 
-AI NOTE: Agents frequently generate flat suffixes like `MyApp.ParserSpec` or `MyApp.PipelineSpec` instead of the dot-separated `MyApp.Parser.Spec`. The `.Spec` must be its own namespace segment. Also watch for non-standard suffixes like `FeatureSpec` - the suffix is always `.Spec`, regardless of the test type.
+Do not use flat suffixes like `MyApp.ParserSpec` or `MyApp.PipelineSpec` - the `.Spec` must be its own namespace segment: `MyApp.Parser.Spec`. Do not use non-standard suffixes like `FeatureSpec` - the suffix is always `.Spec`, regardless of the test type.
 
 **ExUnit** — use `Module.Test` for new codebases. Follow the project's existing convention otherwise. Files live in `test/`.
 
@@ -358,7 +358,7 @@ describe "validation" do
 end
 ```
 
-AI NOTE: Agents frequently name `describe` blocks after function names ("run/2", "adding steps") or abstract operation names ("validation", "execution"). These mirror the code's structure rather than its behavior. Reframe as scenarios: "when ..." or concepts that describe what the system does. However, `context` blocks named after a function (without arity) are acceptable when the tests are specifically about that function's behavior and the concatenated prose reads grammatically.
+Do not name `describe` blocks after function names ("run/2", "adding steps") or abstract operation names ("validation", "execution"). These mirror the code's structure rather than its behavior. Reframe as scenarios: "when ..." or concepts that describe what the system does. However, `context` blocks named after a function (without arity) are acceptable when the tests are specifically about that function's behavior and the concatenated prose reads grammatically.
 
 **Colon-suffix context labels** - `context` blocks may use short noun phrases with a colon suffix (e.g. `context "cache operations:"`, `context "TTL expiration:"`). These are thematic groupings, not behavioral scenarios - the colon signals a category label. ESpec concatenates block descriptions in test output, so the colon ensures grammatical correctness when the `context` label chains with nested `describe`/`it` descriptions. This convention applies to `context` only, not `describe`.
 
@@ -374,7 +374,7 @@ AI NOTE: Agents frequently name `describe` blocks after function names ("run/2",
 
 **Requirement-style language** - test descriptions should read as specifications or behavioral contracts, not as narrations of test steps. Start with a word that signals a requirement: `can`, `returns`, `has`, `is`, `does not`. These frame the test as defining what the system does, not what the test does.
 
-AI NOTE: This is one of the most consistently missed rules. Agents default to procedural descriptions like "parses the input", "sends a request", "builds the config". Every `it` string must read as a specification. Quick check: if the description sounds like a narration of what the test code does step by step, rewrite it. "parses string values" → "can parse string values"; "sends a request" → "can send a request"; "builds a nested map" → "returns a nested map".
+Every `it` string must read as a specification, not a procedural narration. If the description sounds like a narration of what the test code does step by step, rewrite it. "parses string values" → "can parse string values"; "sends a request" → "can send a request"; "builds a nested map" → "returns a nested map".
 
 ```elixir
 # good — requirement-style language (specifications)
@@ -581,7 +581,7 @@ it "does not raise" do
 end
 ```
 
-AI NOTE: Agents generate tests named "does not raise" with `should(be_truthy())` assertions. This is logically wrong - the assertion tests return value truthiness, not absence of exceptions. If the function raised, the test would fail due to the exception itself, making the assertion redundant. If the function returns an error tuple, the assertion passes because error tuples are truthy. Use `expect(fn -> ... end) |> to_not(raise_exception())` to test that code does not raise.
+Do not use `should(be_truthy())` to test that code does not raise. This is logically wrong - the assertion tests return value truthiness, not absence of exceptions. If the function raised, the test would fail due to the exception itself, making the assertion redundant. If the function returns an error tuple, the assertion passes because error tuples are truthy. Use `expect(fn -> ... end) |> to_not(raise_exception())` to test that code does not raise.
 
 Other semantic matchers are appropriate when they test behavior with no primitive equivalent:
 
@@ -592,7 +592,7 @@ value |> should(be_integer())
 value |> should(be_binary())
 ```
 
-AI NOTE: ESpec matchers like `be_integer()`, `be_alive()`, `be_empty()`, `be_binary()`, `be_truthy()`, `be_falsy()`, `be_ok_result()` are function calls that return matcher structs. They MUST keep their parentheses. The zero-arity type parentheses rule (no parens on `integer`, `binary`, `atom` in `@type`/`@spec`) does NOT apply to matcher function calls. Do not strip parens from matchers.
+ESpec matchers like `be_integer()`, `be_alive()`, `be_empty()`, `be_binary()`, `be_truthy()`, `be_falsy()`, `be_ok_result()` are function calls that return matcher structs. They MUST keep their parentheses. The zero-arity type parentheses rule (no parens on `integer`, `binary`, `atom` in `@type`/`@spec`) does NOT apply to matcher function calls. Do not strip parens from matchers.
 
 `be_ok_result()` tests `{:ok, _}` — any value wrapped in `:ok`. This is semantically different from `eq :ok`, which tests the bare atom:
 
@@ -779,7 +779,7 @@ end
 
 When a `before` block has multiple setup steps, apply the same blank line rules as in any function body. Separate distinct setup phases with blank lines. Always add a blank line before `{:shared, ...}` — it is the return value of the block and must be visually separated from the preceding setup.
 
-AI NOTE: Agents consistently omit the blank line before `{:shared, ...}`. Treat `{:shared, ...}` like a return value in a function - it always gets a blank line above it when preceded by other statements.
+Do not omit the blank line before `{:shared, ...}`. Treat it like a return value in a function - it always gets a blank line above it when preceded by other statements.
 
 ```elixir
 # good — blank lines between distinct setup phases; blank line before {:shared, ...}
@@ -995,7 +995,7 @@ it "sends the command" do
 end
 ```
 
-AI NOTE: Agents frequently use `allow/accept` (Meck) to mock modules that are called through Resolve inside a GenServer. This always fails with `:noproc` because Meck operates per-process and the GenServer is a separate process. The fix is always `Resolve.inject`. If you see a `:noproc` error in a test that uses Resolve, check whether Meck is being used where `Resolve.inject` is needed.
+CAUTION: If you see a `:noproc` error in a test that uses Resolve, check whether Meck (`allow/accept`) is being used where `Resolve.inject` is needed. Meck operates per-process, so mocking a module that a GenServer calls through Resolve always fails with `:noproc` because the GenServer is a separate process. The fix is always `Resolve.inject`.
 
 Prefer ESpec/Meck over Mox — it does not require behaviour definitions and integrates naturally with ESpec. If a project already uses Mox, follow local precedence and apply the same principles: clear setup, meaningful assertions, and proper teardown.
 

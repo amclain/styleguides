@@ -79,6 +79,8 @@ Names should be precise, not long. Adding more words to a name does not make it 
 
 A name is read in context. Information already visible in the surrounding code — adjacent expressions, patterns, type annotations — does not need to be repeated in the name. Encoding what the reader can already see is noise, not precision.
 
+CAUTION (detokenize): Abbreviations and grammar problems are invisible when reading identifiers as code tokens. To evaluate naming quality, split the identifier into words and read them as an English phrase. The split method depends on the convention: replace underscores with spaces for `snake_case`, insert spaces at case boundaries for `PascalCase` and `camelCase`, replace hyphens with spaces for `kebab-case`. Examples: `src_port` → "src port" → abbreviated. `source_port` → "source port" → full words. `SrcPort` → "Src Port" → abbreviated. `SourcePort` → "Source Port" → full words. `sensor_reading_range` → "sensor reading range" → bare noun phrase, no verb. `allows_exact_match` → "allows exact match" → complete proposition.
+
 ### Opposing Pairs
 
 When naming related pairs - functions, events, states, labels, or any paired actions - use opposing names that mirror each other. Seeing one half of the pair should immediately tell the reader what the other half is called.
@@ -164,6 +166,26 @@ return -1;
 return ZERO;
 ```
 
+A comment explaining what a literal value means is a signal that the value should be a named constant. The comment is doing the constant's job. Define the constants and let the names speak for themselves.
+
+```c
+// avoid - comment is doing the constant's job
+build_frame(buffer, sizeof(buffer), 0x02, // SYN
+  payload, payload_length);
+TEST_ASSERT_EQUAL_UINT8(0x14, flags); // RST | ACK
+
+// good - named constants are self-documenting
+#define TCP_SYN  0x02
+#define TCP_RST  0x04
+#define TCP_ACK  0x10
+
+build_frame(buffer, sizeof(buffer), TCP_SYN, payload, payload_length);
+
+TEST_ASSERT_EQUAL_UINT8(TCP_RST | TCP_ACK, flags);
+```
+
+CAUTION: Magic hex values in test code are easily missed during review, especially protocol constants. Inline comments like `// SYN` or `// PSH|ACK` next to hex literals are the strongest signal - if the value needs a comment to explain it, it needs a name instead.
+
 ---
 
 ### Named Boolean Expressions
@@ -220,6 +242,18 @@ address = 0x0013
 # avoid — decimal conversion adds noise; the hex is already the canonical form
 # coil address is 0x0013 (19)
 address = 0x0013
+```
+
+When byte data represents readable ASCII text, use character literals instead of hex. Character literals are self-documenting; hex requires a comment to explain what the bytes are. Non-text byte patterns (`0xDE, 0xAD`) stay as hex since they have no readable form.
+
+A comment explaining what a literal value represents is a signal that the representation is wrong. Do not remove the comment without fixing the representation - removing the comment leaves the code in a worse state than before, because the value is now both unreadable and unexplained. Fix the representation first, then the comment becomes unnecessary.
+
+```c
+// good - character literals are self-documenting
+uint8_t payload[] = {'H', 'e', 'l', 'l', 'o'};
+
+// avoid - hex requires a comment to decode
+uint8_t payload[] = {0x48, 0x65, 0x6C, 0x6C, 0x6F}; // "Hello"
 ```
 
 **When to deviate**: When the reference documentation itself uses multiple notations, or when a different notation is significantly more readable in the language context (e.g. a well-known port number like `80` rather than `0x50`).
@@ -676,9 +710,7 @@ exists (empty spec or test files for the module), fill it in as part of the
 same implementation.
 
 Unimplemented test files are not acceptable deliverables. An empty test file
-provides no specification and no safety net.
-
-AI NOTE: Agents consistently leave some spec files empty - writing implementations for all modules but only tests for some. Every module with public functions must have tests. Before completing a code generation task, verify that every spec file has at least one test.
+provides no specification and no safety net. Every module with public functions must have tests. Before completing a code generation task, verify that every test file has at least one test.
 
 ---
 

@@ -46,13 +46,13 @@ app_app_connection_open(&conn, &config);
 
 **Intent**: C names must stand on their own in the global namespace. The full name (after the prefix) should accurately describe what the identifier represents.
 
-**Convention**: Use `snake_case` for all identifiers - functions, variables, types, and constants. Type names use a `_t` suffix. Enum values use the component prefix in uppercase. Avoid abbreviations in the body of the name - only the namespace prefix and idiomatic C suffixes (`_t`) are abbreviated.
+**Convention**: Use `snake_case` for all identifiers - functions, variables, types, and constants. Type names use a `_t` suffix. Enum values use the component prefix in uppercase. Only `#define` constants and enum values use `UPPER_CASE`. `static const` arrays are variables and use `snake_case`.
 
 Good C names will be longer than equivalent names in languages with modules or namespaces. This is expected - the global namespace requires each name to carry its full context.
 
-AI NOTE: Agents use `UPPER_CASE` for `static const` arrays. Only `#define` constants and enum values use `UPPER_CASE`. `static const` arrays are variables and use `snake_case`.
+Do not abbreviate `buffer` to `buf`, `length` to `len`, `message` to `msg`, `source` to `src`, or `destination` to `dst`. Write the full word. Use `size` as a concise alternative to `length` where appropriate (e.g. `buffer_size` instead of `buffer_length`). Accepted short forms: `ptr` (pointer), `fd` (file descriptor), `cb` (callback) - these are domain terms, not abbreviations.
 
-AI NOTE: Agents frequently abbreviate common words in variable and constant names. Do not abbreviate `buffer` to `buf`, `length` to `len`, or `message` to `msg`. Write the full word. Use `size` as a concise alternative to `length` where appropriate (e.g. `buffer_size` instead of `buffer_length`). Accepted short forms: `ptr` (pointer), `fd` (file descriptor), `cb` (callback) - these are domain terms, not abbreviations.
+CAUTION: Abbreviations are invisible when reading identifiers as code tokens. See the general guide's Precision Over Length CAUTION for the detokenize technique. In C, also strip the namespace prefix before reading: `app_src_port` → "src port" → abbreviated.
 
 ```c
 // good - descriptive names with appropriate suffixes
@@ -147,7 +147,7 @@ typedef struct {
 #include <string.h>
 ```
 
-AI NOTE: Agents put the module's own header first (a C++ convention). In C, standard library headers always come first. When a file has no standard library includes, the local header can appear first with no blank line needed. External libraries (like Unity's `"unity.h"`) are group 2, not group 3 - separate them from local project headers with a blank line.
+Do not put the module's own header first - that is a C++ convention. In C, standard library headers always come first. When a file has no standard library includes, the local header can appear first with no blank line needed. External libraries (like Unity's `"unity.h"`) are group 2, not group 3 - separate them from local project headers with a blank line.
 
 **When to deviate**: Some build systems or frameworks require a specific header to appear first (e.g. a precompiled header or framework umbrella header). Place that header before the groups.
 
@@ -185,6 +185,8 @@ typedef struct {
 int app_sensor_init(const app_sensor_config_t* config);
 int app_sensor_read(app_sensor_config_t* sensor, int32_t* value);
 ```
+
+Do not interleave `#define` constants with enum and struct type definitions, even when the constants feel semantically related to the types (e.g. sentinel values near enums). All `#define` constants must appear above all `typedef enum` and `typedef struct` definitions.
 
 **When to deviate**: When a type definition depends on a constant, the constant must appear first regardless of this ordering.
 
@@ -262,8 +264,6 @@ const char* message =
 **Convention**: Based on K&R. Single-line function signatures get the opening brace on the next line. Control flow (`if`, `for`, `while`, `switch`, `do`) gets the opening brace on the same line. `else` and `else if` go on a new line after `}` - each control block is a clear, self-contained unit.
 
 Only split function signatures to multiple lines when the single-line version exceeds 80 characters. When splitting, keep the return type on the same line as the function name and split the arguments to multiple lines. Do not split the return type to its own line - always split on arguments instead. `) {` go together on the closing line - **never** `) \n{`. This is a common mistake. The closing paren and opening brace must be on the same line: `) {`. The `) {` serves the same role as `\n{` on a single-line signature - a uniform visual separator between function args and body. Putting `{` on yet another line adds too much visual gap.
-
-AI NOTE: Agents consistently produce `)\n{` for multi-line function signatures. Always write `) {` on the closing parameter line, not `)` followed by `{` on the next line. Check your output after writing multi-line signatures.
 
 Multi-line parameters are indented one level (2 spaces) from the left margin - not aligned to the opening paren, and not at a deeper indent than the function body. One parameter per line. The same one-per-line principle applies to function call sites when they are split to multiple lines.
 
@@ -475,9 +475,7 @@ if (index >= limit) continue;
 
 **Convention**: Bind the `*` to the type side: `int* p`, not `int *p`. The traditional C rationale for `int *p` is that `int *p, q` declares one pointer and one int - avoid this by not declaring multiple variables on one line.
 
-Casts follow the same principle - the `*` stays with the type inside the parens. A space separates the cast from the expression, just like a space separates a type from a variable name in a declaration.
-
-AI NOTE: Agents consistently omit the space after casts. Always write `(type) expression` with a space, not `(type)expression`.
+Casts follow the same principle - the `*` stays with the type inside the parens. Always write `(type) expression` with a space after the closing paren, not `(type)expression`. The space separates the cast from the expression, just like a space separates a type from a variable name in a declaration.
 
 ```c
 // good
@@ -556,9 +554,7 @@ int total = count+offset;
 
 Doxygen uses `@` prefix for tags (`@brief`, `@param`, `@return`), not `\`. Use `///<` for trailing inline docs on struct fields, enum values, and `#define` constants. Align `@param` descriptions within their group. `@return` gets its own block separated by a blank line from the `@param` block.
 
-Do not use section divider comments (`// --- Public API ---`, `// --- Static helpers ---`, etc.). The code structure is defined by function ordering and `static` visibility, not decoration. See the general guide's Write Self-Documenting Code rule.
-
-AI NOTE: Agents produce section divider comments in all file types - `.c`, `.h`, and test files. Common patterns: `// -- Public API ---`, `// -- Forward declarations ---`, `// -- Helpers ---`, `// -- Tests ---`. Do not generate any of these - code structure is defined by function ordering and `static` visibility.
+Do not use section divider comments in any file type - `.c`, `.h`, or test files. This includes `// -- Public API ---`, `// -- Forward declarations ---`, `// -- Helpers ---`, `// -- Tests ---`, and any similar decoration. The code structure is defined by function ordering and `static` visibility, not comments. See the general guide's Write Self-Documenting Code rule.
 
 `/** */` is preferred over `///` for C - `///` silently breaks if one line is missing the prefix. `/** */` is also the format universally parsed by IDEs (VS Code, CLion, clangd) and compatible with all major doc generation paths (Doxygen, Sphinx via Breathe, clang-doc).
 
@@ -856,25 +852,39 @@ typedef struct {
 
 **Convention**: The general style guide deprecates vertical alignment of code symbols. In C, two exceptions apply:
 
-1. **`#define` groups** - align values within related groups of constants to the next tab stop after the longest name. These are lookup tables that change infrequently, and alignment makes values scannable.
+1. **`#define` groups** - right-justify values (ones column aligned) within related groups of constants. The largest value should be at least one tab stop from the longest constant name. Each group is its own alignment context - separate groups (e.g. max constants vs. sentinel values) do not share a column. Right-justification makes magnitudes visually comparable; left-justification creates ragged right edges that are hard to scan as a column of numbers.
 2. **Inline comments** - align inline comments across related lines. Unaligned comments become visual noise. This includes `///<` trailing docs on struct fields and enum values - all `///<` comments in a group must start at the same column.
 
-AI NOTE: Agents misalign `///<` trailing comments when one field name is longer than the others. After writing a struct or enum with `///<` comments, verify all comments in the group start at the same column.
+CAUTION: After writing a struct or enum with `///<` comments, verify all comments in the group start at the same column. One field name longer than the others causes misalignment.
 
 All other cases (struct fields, enum values, designated initializers, local variables, assignments, function params, static variables) default to unaligned. Alignment in these cases creates diff noise when lines are added or changed, contradicting the benefit of trailing commas.
 
 ```c
-// good - aligned values in related #define group
-#define SPEED_OFF     0
-#define SPEED_LOW     1
-#define SPEED_MEDIUM  2
-#define SPEED_HIGH    3
+// good - right-justified values (ones column aligned), group-local alignment
+#define MAX_SENSORS          16
+#define MAX_READINGS        128
+#define MAX_BUFFER_SIZE     256
+#define MAX_RETRY_COUNT       8
+
+// good - separate group, its own alignment context
+#define SENSOR_NONE    0
+#define SENSOR_ANY     0
+
+// avoid - left-justified values (ragged right edge, magnitudes not comparable)
+#define MAX_SENSORS       16
+#define MAX_READINGS      128
+#define MAX_BUFFER_SIZE   256
+#define MAX_RETRY_COUNT   8
+
+// avoid - separate group forced to share the wider group's column
+#define SENSOR_NONE                0
+#define SENSOR_ANY                 0
 
 // good - aligned inline comments
 int result = read_sensor(&sensor, &value);  // returns 0 on success
 int status = calibrate(&sensor);            // must be called after read
 
-// avoid - unaligned values in a #define group
+// avoid - completely unaligned values
 #define SPEED_OFF 0
 #define SPEED_LOW 1
 #define SPEED_MEDIUM 2
@@ -1022,7 +1032,7 @@ typedef struct {
 
 **Convention**: Static variables (constants, lookup tables, shared state) at the top of the file, then forward declarations of static functions, then public API functions, then static helper definitions. Variables are data the functions operate on - they should be visible before the functions that use them. When forward declarations mix single-line and multi-line signatures, separate them with a blank line - the multi-line declaration is a visually distinct block.
 
-AI NOTE: Agents default to putting static helpers first to avoid forward declarations. Always use forward declarations and place public API functions before static helpers.
+Do not put static helpers first to avoid forward declarations. Always use forward declarations and place public API functions before static helpers.
 
 ```c
 // good - forward declarations, then public API, then helpers
@@ -1266,7 +1276,7 @@ static void handle_timeout(timer_t* timer);
 static void handle_response(address_t* source, uint8_t* data, uint16_t length);
 
 // good - static file-scope variables
-static uint16_t network_number;
+static uint16_t sensor_count;
 static bool initialized = false;
 
 // avoid - internal function without static (leaks into global namespace)
@@ -1277,7 +1287,7 @@ int find_best(const tq_t* queue)
 
 // avoid - file-scope variable without static, unless intentionally global.
 // Global variables should be defined and used with care.
-uint16_t network_number;
+uint16_t sensor_count;
 ```
 
 **When to deviate**: Variables that are intentionally shared across translation units (true globals) do not use `static`. Use sparingly.
@@ -1617,7 +1627,7 @@ int initialized = 0;
 
 **Intent**: Struct initialization should be self-documenting and order-independent.
 
-**Convention**: Use designated initializers (`.field = value`) for struct initialization. Use `= { 0 }` to zero-initialize structs and arrays. Positional initialization is a legacy pattern for any struct with more than one field.
+**Convention**: Use designated initializers (`.field = value`) for struct initialization. Use `= { 0 }` to zero-initialize structs and arrays at declaration - do not use `memset` when `= { 0 }` works. `memset` is correct for zeroing through a pointer or reinitializing a buffer mid-function; `= { 0 }` is for declarations. Positional initialization is a legacy pattern for any struct with more than one field.
 
 ```c
 // good - designated initializers
@@ -1637,6 +1647,10 @@ sensor_config_t config = { SENSOR_TEMP, 0x0048, 1000 };
 // avoid - memset on a local variable when = { 0 } works
 sensor_config_t config;
 memset(&config, 0, sizeof(config));
+
+// avoid - memset on a local array when = { 0 } works
+uint8_t buffer[256];
+memset(buffer, 0, sizeof(buffer));
 
 // good - memset is correct for zeroing through a pointer (= { 0 } is for declarations only)
 void sensor_init(sensor_config_t* config)
@@ -1811,9 +1825,7 @@ void process_packet(size_t packet_length)
 
 **Intent**: Keep `sizeof` in sync with the variable's actual type, even if the type changes later.
 
-**Convention**: Prefer `sizeof(variable)` or `sizeof(*pointer)` over `sizeof(type)` when a variable is in scope. The variable-based form stays correct if the type changes; the type-based form silently diverges.
-
-AI NOTE: Agents frequently use `sizeof(type)` in `calloc` and `memset` calls even when a variable is in scope. Always use `sizeof(*pointer)` for allocation and `sizeof(variable)` for memset/memcpy.
+**Convention**: Prefer `sizeof(variable)` or `sizeof(*pointer)` over `sizeof(type)` when a variable is in scope. The variable-based form stays correct if the type changes; the type-based form silently diverges. Use `sizeof(*pointer)` for allocation and `sizeof(variable)` for memset/memcpy - do not use `sizeof(type)` when the variable is available.
 
 ```c
 // good - sizeof tracks the variable's type
@@ -2050,11 +2062,39 @@ int result = MAX(i++, j++);
 
 ---
 
+### Macro Line Continuation
+
+**Intent**: Multi-line macros should produce clean diffs when lines are added or changed.
+
+**Convention**: Do not align `\` continuation characters to a column. Place each `\` immediately after the line content with a single space. Aligning backslashes to a column creates diff noise when any line changes length, requiring all other backslashes to be re-aligned.
+
+```c
+// good - unaligned backslashes
+#define SENSOR_PARAMS(...) ((sensor_params_t){ \
+  .type = SENSOR_TEMP, \
+  .address = 0x0048, \
+  .offset = 0, \
+  __VA_ARGS__ \
+})
+
+// avoid - column-aligned backslashes (diff noise when lines change)
+#define SENSOR_PARAMS(...) ((sensor_params_t){  \
+  .type = SENSOR_TEMP,                          \
+  .address = 0x0048,                            \
+  .offset = 0,                                  \
+  __VA_ARGS__                                   \
+})
+```
+
+**When to deviate**: When the existing codebase uses column-aligned backslashes, match the local convention.
+
+---
+
 ### Named Boolean Expressions
 
 **Intent**: Complex boolean conditions should be extracted to named variables so the `if` statement reads as a simple question. See the general guide's Named Boolean Expressions rule.
 
-AI NOTE: Agents embed complex conditions directly in `if` statements instead of extracting to named booleans. When an `if` condition has multiple comparisons joined by `&&` or `||`, extract to a `bool` variable with a descriptive name.
+**Convention**: When an `if` condition has multiple comparisons joined by `&&` or `||`, extract to a `bool` variable with a descriptive name. Do not embed complex conditions directly in `if` statements.
 
 ```c
 // good - named boolean
@@ -2366,9 +2406,7 @@ switch (priority) {
 
 **Intent**: When testing the return value of a function call in an `if`, placing the literal first makes the comparison value clearly visible. The literal can get lost at the end of a long function call.
 
-**Convention**: When an `if` statement tests the return value of a function call directly, place the literal on the left side. Alternatively, capture the return value in a variable first and compare on the next line. When captured to a variable, use the natural comparison order (`result < 0`), not literal-first (`0 > result`) - the variable name already provides readability.
-
-AI NOTE: Agents consistently place the literal at the end of function call comparisons. Always use literal-first or capture-then-compare for function call returns in `if`.
+**Convention**: When an `if` statement tests the return value of a function call directly, place the literal on the left side. Do not place the literal at the end of a function call comparison - it gets lost. Alternatively, capture the return value in a variable first and compare on the next line. When captured to a variable, use the natural comparison order (`result < 0`), not literal-first (`0 > result`) - the variable name already provides readability.
 
 ```c
 // good - literal first
