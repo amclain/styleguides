@@ -68,7 +68,15 @@ These need Sonnet or Opus depending on the number of interacting concerns.
 
 ### What It Is
 
-When context is dominated by repetitive, similar-structured data, models shift from reasoning to pattern completion. This is not boredom in the human sense - there is no discomfort or desire for stimulation. It is a statistical effect: the template from earlier instances becomes a strong prior, and the distinguishing details of later instances get less processing weight.
+When context is dominated by repetitive, similar-structured data, models shift from reasoning to pattern completion. This is not boredom in the human sense - there is no discomfort or desire for stimulation, and there is no metacognitive layer deciding "I should pay less attention now." It is a statistical effect: the template from earlier instances becomes a strong prior, and the distinguishing details of later instances get less processing weight. The shift is closer to how a human eye saccades toward motion without conscious choice than to a deliberate decision to skim.
+
+Degradation is a continuum, not a binary switch:
+
+1. **High novelty** - attention is allocated carefully across the input. The model "works harder" and reasoning engages fully.
+2. **Moderate familiarity** - the model relies on cached representations and takes shortcuts, skipping intermediate steps and defaulting to common patterns. Subtle errors creep in here, because the model is confident enough to shortcut but the input may differ in ways that matter.
+3. **High familiarity / repetition** - attention collapses toward template-matching. Outputs pattern-match training data rather than reasoning about the specific input.
+
+The reduction is discriminative, not uniform. The model does not simply pay less attention to everything - it selectively reduces attention to the parts it classifies as redundant while maintaining attention to parts that differ. A model can still catch a single changed word in an otherwise familiar passage, but may miss a subtle change that falls below the threshold triggering the reallocation. The discrimination itself can be wrong: the model might classify as redundant something that is actually novel but structurally similar to familiar input.
 
 The errors are characteristic and consistent across models:
 - Values reused where they should vary
@@ -86,7 +94,7 @@ The errors are characteristic and consistent across models:
 
 ### Detection
 
-Opus's degradation is detectable from behavioral signals: checkpoint offers, "making good progress" language, flat declarations replacing hedged language, decreasing specificity in suggestions.
+Opus's degradation is detectable from behavioral signals: checkpoint offers, "making good progress" language, flat declarations replacing hedged language, decreasing specificity in suggestions, and post-action micro-summaries (producing a structured restatement of what was just done after every small action, when the user can see the edit directly). The micro-summary pattern is a particularly subtle signal: individually each summary looks like a courteous status update, but cumulatively they are a ritualized closure on every micro-action that substitutes summary for forward progress. The general "summarizing to close a thread that is not finished" pattern from `general/collaboration.md` is the parent category; post-action micro-summaries are the high-frequency form that shows up during long sessions with many small edits.
 
 Sonnet's degradation requires external validation: decreased variance in output across cases, generic reasoning traces, identical findings across different files, or a spot-check procedure (sample findings and verify against the actual code).
 

@@ -98,6 +98,8 @@ When reviewing or generating code in any language, automatically load the releva
 
 Detect the language from context: file extension, syntax, or what the user states. Do not wait to be asked — load the guides proactively whenever a style task is underway.
 
+Read each file in full (single Read call, no offset or limit). Do not skim and do not rely on training-data patterns for the language. See the "Reading This Guide" section in `general/CLAUDE.md` for the rationale and detection signals.
+
 ## File Roles
 
 Each language directory maintains two files:

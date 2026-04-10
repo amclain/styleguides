@@ -122,17 +122,42 @@ end
 
 ---
 
+### Test block keywords: semantic roles
+
+The four block keywords split into two axes by the semantic role they play:
+
+|          | behavior / action | scope / proposition |
+|----------|-------------------|---------------------|
+| grouping | `describe`        | `context`           |
+| test     | `it`              | `specify`           |
+
+**At the grouping level**, the distinction is between describing a **behavior or action** and establishing a **scope** the tests apply under:
+
+- **`describe`** names a behavior, action, scenario, or event the tests verify. Typical describe strings are action phrases (`"add a device"`, `"remove a device"`, `"reload"`), function or command names being tested (`"decode"`, `"encode"`), `"when X"` scenario phrases (`"when the host is unreachable"`), or state transitions.
+- **`context`** sets the scope, state, role, or condition the tests run under. Typical context strings are states ("logged in user"), subsystems ("sensor"), or category labels ("cache operations:"). The scope is often implied by the module name, so `context` is frequently omitted in small and medium files; reach for it when the module is complex enough to need sub-scoping or has multiple states to test.
+
+Intent is the litmus test. If you meant the string as a scope the tests run under, it is `context`. If you meant it as the behavior or action the tests verify, it is `describe`. A string like "logged in user" is `context` - you are not describing a logged-in user, you are scoping tests to the state where a user is logged in.
+
+**At the test level**, the distinction is grammatical and falls out of how `it` and `specify` are read:
+
+- **`it`** is a pronoun in the test description. The string after it is read with "it" in front - `it "returns a calibrated value"` in a spec for the `Sensor` module is shorthand for "Sensor returns a calibrated value". The "it" refers to the subject under test. Grammar checks apply: the string after `it` must be a well-formed predicate of the subject.
+- **`specify`** reads as just the string - no pronoun, no prepended keyword. The string stands alone as a proposition scoped to the enclosing block. Use `specify` when the string cannot be phrased as a predicate of the subject without distorting the description.
+
+The two axes mirror each other in preference. Prefer the behavior/action form (`describe`, `it`) when it fits the intent; fall back to the scope/proposition form (`context`, `specify`) when forcing the behavior form would distort what the test is actually describing.
+
+ExUnit has no `it`, `specify`, or `context` - `describe` is its only grouping block and `test` is its only test keyword. ExUnit's `test` is grammatically a standalone proposition (like `specify`). ExUnit's `describe` carries both the behavior/scenario and scope roles by necessity; choose the describe string based on intent, just as you would choose between ESpec `describe` and `context`.
+
+---
+
 ### describe and context
 
 Both `describe` and `context` are grouping blocks - they organize tests but do not execute them. `it` and `specify` are the keywords that define executable tests.
 
-**`describe`** is the default grouping block. It describes a scenario, operation, or condition being tested. `describe` blocks sit at the top level or nest inside `context`. Use `describe` when the description is prose that chains grammatically with nested `it` blocks.
+**`describe`** groups tests around a behavior, action, or scenario being verified. Its string names what is happening or what is being tested. Typical describe strings are action phrases (`describe "add a device"`, `describe "register a device"`, `describe "reload"`), function or command names being tested (`describe "decode"`, `describe "encode"`), `"when X"` or `"with X"` scenario phrases (`describe "when the input is nil"`, `describe "when the host is unreachable"`), or state-transition descriptions.
 
-**`context`** is a label-level grouping used when multiple `describe` blocks share a parent category - typically a function name, a hardware subsystem, or an operational mode. `context` is optional. A flat list of `describe` or `it` blocks is fine when no category ties them together.
+**`context`** groups tests around a scope, state, role, or category the tests run under. Its string names the scope, not the behavior. Typical context strings are states ("logged in user"), subsystems or subjects ("sensor"), or category labels ("cache operations:"). Because the module name usually implies the scope, `context` is often unnecessary in small and medium files - use it when the module is complex enough to need sub-scoping, has multiple states to test, or groups multiple `describe` blocks that share a parent scope.
 
-Nesting order: `context` → `describe` → `it`/`specify`. `context` is the outer label; `describe` is the scenario within it; `it` is the individual test.
-
-`describe` and `it` are grammatically equal in test output - both contribute a phrase to the description chain. The difference is mechanical: `describe` has a block and is used for grouping (`before`, `finally`, multiple `it` blocks), whereas `it` is a single test.
+**Typical nesting** is `context → describe → it`/`specify`. `context` is the outer scope, `describe` is the scenario within that scope, `it` or `specify` is the individual test. `context → it` (no intermediate `describe`) is valid but less common - it fits when the tests share a scope but no common scenario. Further nesting is a prompt to examine the module: if the module is genuinely complex and appropriately scoped, deeper nesting is fine; if the nesting is compensating for a module that has taken on too many responsibilities, decompose the module instead.
 
 Three signals that a grouping block is warranted:
 
@@ -140,10 +165,10 @@ Three signals that a grouping block is warranted:
 - Multiple tests share the same `before`/`finally` setup - the block scopes the setup to exactly the tests that need it
 - Multiple tests share behavior via shared examples - `it_behaves_like` can be scoped inside a block
 
-**`describe` at the top level** - the default. No `context` needed when `describe` blocks have no shared parent category:
+**`describe` at the top level** - the default when the module name already supplies the scope. No `context` is needed if the module is small or medium and the `describe` blocks all apply to the same implicit scope:
 
 ```elixir
-# good — describe at top level
+# good — describe at top level; module name is the scope
 describe "when the input is nil" do
   it "returns a default value"
   it "logs a warning"
@@ -163,10 +188,36 @@ context "edge cases:" do
 end
 ```
 
-**`context` as a category label** - use `context` when multiple `describe` blocks or `it` blocks share a parent category. Append a colon to signal the label stands on its own rather than chaining grammatically:
+**`context` for state, role, or subsystem** - use `context` when the tests run under a specific state, role, or subsystem scope that the module name does not already imply. The context string names the scope, not a behavior:
 
 ```elixir
-# good — context labels the category; describe blocks are the scenarios
+# good — "logged in user" is the state the tests apply under;
+# `describe` names the action within that state
+context "logged in user" do
+  describe "when making a purchase" do
+    it "returns 200 when the transaction succeeds"
+    it "returns 404 if the item is not found"
+    it "returns 204 when the item is removed from the cart"
+  end
+end
+```
+
+**`context → it` directly** is valid but less common. It fits when a shared scope applies but the tests inside it do not share a common action or scenario that would warrant a `describe` layer:
+
+```elixir
+# good — context scopes to a state; each it is a separate behavior
+# under that state
+context "logged in user" do
+  it "can view the dashboard"
+  it "can update their profile"
+end
+```
+
+**`context` for a category or subsystem grouping** - use `context` when multiple `describe` blocks share a parent scope that the module name does not imply. The context names the scope, not a scenario:
+
+```elixir
+# good — context scopes to the nvdefine function; describe blocks are
+# the scenarios being tested within that scope
 context "nvdefine:" do
   it "allocates an index, chosen by the TPM"
 
@@ -190,23 +241,7 @@ context "nvdefine:" do
 end
 ```
 
-**`context` with prose** - when the context description is a prose phrase rather than a label, omit the colon. The description chains grammatically with nested blocks:
-
-```elixir
-# good — prose chains: "logged in user can view the dashboard"
-context "logged in user" do
-  it "can view the dashboard"
-  it "can update their profile"
-end
-
-# avoid — colon breaks the grammatical chain
-context "logged in user:" do
-  it "can view the dashboard"
-  it "can update their profile"
-end
-```
-
-**Description concatenation** - ESpec concatenates the descriptions of nested blocks when printing test output. Write descriptions that chain into readable sentences. Source code readability is the tiebreaker: if a chain-friendly description reads awkwardly in code, adjust it.
+**Description concatenation** - ESpec concatenates the descriptions of nested blocks when printing test output. Once the keywords are chosen by semantic role, the concatenation usually reads naturally: `context "logged in user"` + `describe "when making a purchase"` + `it "returns 200 when the transaction succeeds"` prints as "logged in user when making a purchase returns 200 when the transaction succeeds" - a full specification of the state, action, and outcome. Source code readability is the tiebreaker: if a chain-friendly description reads awkwardly in code, adjust it.
 
 **`describe` + `specify` for single tests with setup** - when a `describe` exists solely to scope `before`/`finally` for a single test, put the full description on `describe` and use a bare `specify` (no string) for the test body. This avoids duplicating the description between `describe` and `it`:
 
@@ -358,9 +393,41 @@ describe "validation" do
 end
 ```
 
-Do not name `describe` blocks after function names ("run/2", "adding steps") or abstract operation names ("validation", "execution"). These mirror the code's structure rather than its behavior. Reframe as scenarios: "when ..." or concepts that describe what the system does. However, `context` blocks named after a function (without arity) are acceptable when the tests are specifically about that function's behavior and the concatenated prose reads grammatically.
+Do not name `describe` blocks after function names ("run/2", "adding steps") or abstract operation names ("validation", "execution"). These mirror the code's structure rather than its behavior. Reframe as scenarios: "when ..." or descriptions of what the system does. However, `context` blocks named after a function (without arity) are acceptable when the tests are scoping to that function as a subsystem - `context` is scoping, not describing.
 
-**Colon-suffix context labels** - `context` blocks may use short noun phrases with a colon suffix (e.g. `context "cache operations:"`, `context "TTL expiration:"`). These are thematic groupings, not behavioral scenarios - the colon signals a category label. ESpec concatenates block descriptions in test output, so the colon ensures grammatical correctness when the `context` label chains with nested `describe`/`it` descriptions. This convention applies to `context` only, not `describe`.
+**Colon-suffix context labels** - `context` blocks may use short noun phrases with a colon suffix (e.g. `context "cache operations:"`, `context "TTL expiration:"`). The colon is a readability aid for cases where the context label would otherwise run into the nested test description awkwardly when ESpec concatenates them in output. It is not a grammatical requirement - a bare noun like `context "sensor"` does not need a colon, because "sensor returns the calibrated value" already reads cleanly. Use the colon when the label is a multi-word noun phrase that would run together awkwardly with the nested description, and omit it otherwise. This convention applies to `context` only, not `describe`.
+
+The keyword choice inside the block still follows the `it`/`specify` rule on its own merits. A multi-word context label combined with the colon suffix interacts with both `it` and `specify` the same way a bare context would:
+
+```elixir
+# good — `specify` for a standalone proposition. Reads:
+# "cache operations: stale entries are dropped after the TTL expires"
+context "cache operations:" do
+  specify "stale entries are dropped after the TTL expires" do
+    # ...
+  end
+end
+
+# good — `it` when the string reads as a predicate of the subject. Reads:
+# "cache operations: drops stale entries after the TTL expires".
+# Standalone test reads "it drops stale entries after the TTL expires".
+context "cache operations:" do
+  it "drops stale entries after the TTL expires" do
+    # ...
+  end
+end
+
+# avoid — `it` with a string that does not fit after the pronoun.
+# Standalone reads "it stale entries are dropped" - broken. Either switch
+# to `specify`, or rewrite the string to lead with a verb.
+context "cache operations:" do
+  it "stale entries are dropped" do
+    # ...
+  end
+end
+```
+
+The colon is what makes the label readable; the `it`/`specify` keyword choice is decided entirely by whether the string reads as a predicate of the subject.
 
 **When to deviate**: a flat list of `it` blocks without any grouping is acceptable for simple specs with no meaningful structure.
 
@@ -368,9 +435,32 @@ Do not name `describe` blocks after function names ("run/2", "adding steps") or 
 
 ### `it`, `specify`, and `specify do`
 
-`it` is action- or behavior-oriented. The description states something the subject does, can do, or returns. `it` always takes a string - `it do` without a string does not parse grammatically.
+See [Test block keywords: semantic roles](#test-block-keywords-semantic-roles) for the underlying framing. `it` and `specify` are the two test-level keywords; this section covers when to use which.
 
-`specify` is used when the description is a property, constraint, or qualifier rather than a behavior, or when it continues the parent `describe` phrase as a natural extension. `specify` can be used with or without a string.
+`it` is the preferred test keyword in ESpec. Craft the description so "it [string]" reads as a well-formed sentence about the subject under test. Most behavior descriptions naturally want this shape, and starting from `it` pulls descriptions toward the specification style the Tests Are Specifications rule wants.
+
+`it` always takes a string - `it do` is not a valid form in ESpec.
+
+**Fall back to `specify`** when an accurate description of the test genuinely resists the `it` form - typically when the string has to introduce its own scenario subject or state a property, and rewriting it to fit after `it` would distort the meaning or bury the point. `specify` reads as just the string - no pronoun to attach, no predicate to form.
+
+Do not force a description into `it` at the cost of accuracy. But also do not reach for `specify` when a simple rewrite of the description would make `it` work.
+
+**Converting a `specify` wording to `it`.** The practical tool is adding an auxiliary or linking verb - `can`, `has`, `is`, `does`, `returns`, or the subject's own conjugated verb. These give the "it" pronoun something to predicate against. Most descriptions that read awkwardly after `it` become clean when the right verb is supplied, and the rewrite usually forces a more accurate description of the behavior as a side effect.
+
+```elixir
+# specify "brightness value"             → it "has a brightness value"
+# specify "send notification"            → it "can notify a child device"
+# specify "activate alarm when too cold" → it "activates an alarm when the temperature is too cold"
+```
+
+A noun-leading scenario can often be restructured into an `it` form by moving the scenario into a `when` clause, so the subject-under-test reclaims the front of the sentence:
+
+```elixir
+# specify "value out of range returns error"
+#   → it "returns an error when the value is out of range"
+```
+
+Concatenates with `context "sensor"` to "sensor returns an error when the value is out of range". Use this technique when the scenario is cleanly expressible as a `when`-clause; fall back to `specify` when the scenario subject carries too much weight to demote.
 
 **Requirement-style language** - test descriptions should read as specifications or behavioral contracts, not as narrations of test steps. Start with a word that signals a requirement: `can`, `returns`, `has`, `is`, `does not`. These frame the test as defining what the system does, not what the test does.
 
@@ -394,7 +484,17 @@ it "builds a nested map"
 # avoid — implementation details or meaningless descriptions
 it "sends the correct command"   # what is a "correct" command?
 it "controlling DO0 based on lux" # "DO0" is an implementation detail
-it "turns on the output when lux is below the threshold" # redundant when describe provides context
+
+# avoid — redundant: the describe already supplies "when lux is below the
+# threshold", so the it string repeats it
+describe "when lux is below the threshold" do
+  it "turns on the output when lux is below the threshold"
+end
+
+# good — the it string drops what the describe already provides
+describe "when lux is below the threshold" do
+  it "turns on the output"
+end
 
 # good — specify: property or constraint
 context "zone name validation" do

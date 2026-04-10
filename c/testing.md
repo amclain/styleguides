@@ -40,16 +40,18 @@ The name is the specification - it should read as a behavioral proposition. A te
 
 The module name is already in the file name - don't repeat it in every test function name.
 
-**Evaluating a test name.** Apply the detokenize technique from the general guide: strip `test_`, replace underscores with spaces, and read the result as English. Then apply the litmus test: can you say "it [name]" and have a complete sentence?
+**Evaluating a test name.** Unity's `test_` prefix is scaffolding - it is not read as part of the description. Strip `test_`, replace underscores with spaces, and read the remainder alone, scoped to the file subject (the module the file is for). The name should read as a complete proposition about that subject. When writing the check out, "`subject`, `name`" is a convenient shorthand - it is just a way of reminding yourself what subject the name has to hold up against, not a literal string that appears anywhere in the code.
 
-- `test_returns_calibrated_value` → "it returns calibrated value" - complete proposition
-- `test_read_sensor` → "it read sensor" - imperative, not a proposition
-- `test_capacity_limit` → "it capacity limit" - noun phrase, no verb
-- `test_value_preserved` → "it value preserved" - missing auxiliary verb ("is preserved")
+- `test_returns_calibrated_value` in `test_sensor.c` → "sensor, returns calibrated value" - complete proposition
+- `test_read_sensor` → "sensor, read sensor" - imperative, not a proposition
+- `test_capacity_limit` → "sensor, capacity limit" - noun phrase, no verb
+- `test_value_preserved` → "sensor, value preserved" - missing auxiliary verb ("is preserved")
+
+Noun-leading names are valid when the name introduces its own scenario subject scoped to the file. `test_unknown_sensor_returns_error` in `test_registry.c` reads as "registry, unknown sensor returns error" - a complete proposition where "unknown sensor" is the scenario subject within the registry's scope.
 
 **Three questions for finding the right name:**
 
-1. **"Can I say 'it [name]' and have a complete sentence?"** Catches grammar problems: missing verbs, bare noun phrases, imperative mood. If the answer is no, the name needs a verb or restructuring.
+1. **"Does the detokenized name read as a complete proposition scoped to the enclosing subject?"** Catches grammar problems: missing verbs, bare noun phrases, imperative mood. Handles both verb-leading names (where the file subject is implicit) and noun-leading scenario names (where the name introduces its own subject).
 
 2. **"What behavior does this prove exists?"** Derive the name from the assertion, not the function being called. The assertion is what the test proves. `TEST_ASSERT_NULL(result)` after a lookup → `test_removed_sensor_is_not_found`. Do not name it `test_remove_sensor` - that names the action, not the outcome.
 
@@ -72,9 +74,18 @@ void test_sensor_can_be_removed(void) { ... }
 void test_returns_null_when_sensor_not_found(void) { ... }
 void test_skips_poll_when_registry_is_full(void) { ... }
 
-// good - tautological name is correct when the API name is a proposition
+// good - noun-leading scenario; in test_registry.c this reads as
+// "registry, unknown sensor returns error" - the name introduces
+// "unknown sensor" as the scenario subject within the registry scope
+void test_unknown_sensor_returns_error(void) { ... }
+void test_duplicate_insert_is_idempotent(void) { ... }
+
+// good - tautological name is correct when the API name itself forms
+// part of the proposition. "enabled sensor" is the scenario setup, and
+// "is_enabled" is the API function under test - the name reads as a
+// test of the API's own claim: an enabled sensor reports that it is
+// enabled.
 void test_enabled_sensor_is_enabled(void) { ... }
-// "enabled sensor" is the setup, "is_enabled" is the API function
 
 // avoid - mirrors code structure
 void test_read_sensor(void) { ... }
@@ -86,10 +97,6 @@ void test_sensor_init(void) { ... }
 
 // avoid - repeats module name from file
 void test_sensor_returns_calibrated_value(void) { ... }  // in test_sensor.c
-
-// In Google Test, the same principle applies:
-// TEST(Sensor, ReturnsCalibratedValue) { ... }
-// TEST(Sensor, ReturnsErrorWhenNotInitialized) { ... }
 ```
 
 Test names can be long. A descriptive 60-character function name is better than a cryptic 20-character one.

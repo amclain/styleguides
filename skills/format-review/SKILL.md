@@ -7,28 +7,40 @@ description: Review code for style violations and walk through them with the use
 
 Review the project's code for style violations and present them as numbered suggestions. The user decides which to apply.
 
+This skill is a thin entry point. The orchestration logic (task decomposition, model assignments, required reading, scope handling, group cohesion exceptions, quality signals) lives in `general/review-orchestration.md`. This file specifies only the review-mode behavior that wraps the framework.
+
 ## Loading the Style Guide
 
 The style guide must be loaded before reviewing. Derive the styleguides repo path from one of:
 1. The `@` import in the project's CLAUDE.md (strip `general/CLAUDE.md` to get the repo root)
 2. The `deps/styleguides/` directory if it exists
 
-Read these files in order:
-1. `<repo_root>/general/CLAUDE.md` - general principles and operating modes
-2. The language guide detected from file extensions (e.g. `<repo_root>/elixir/CLAUDE.md`)
-3. Any `@` imports at the top of the language guide (e.g. `elixir/testing.md`)
+Read these files in full (single Read call per file, no offset or limit, per the "Reading This Guide" rule in `general/CLAUDE.md`):
 
-The style guide contains all the rules. Apply them as documented.
+1. `<repo_root>/general/CLAUDE.md` - general principles, operating modes, and the "Reading This Guide" rule
+2. `<repo_root>/general/review-orchestration.md` - the multi-agent orchestration framework and per-language instantiations
+3. `<repo_root>/<lang>/CLAUDE.md` - the language guide for the files being reviewed
+4. `<repo_root>/<lang>/testing.md` - if any file in scope is a test file (typically `@` imported; load explicitly if not)
+5. Any additional mechanics references the language guide specifies for frameworks in use
 
-## Scope
+Do not improvise the orchestration or substitute training-data patterns for the rules. The framework captures specific failure modes that generic approaches miss.
 
-Default: all files changed since the last commit (`git diff` and `git diff --staged`). Read full files for context; flag issues only in changed lines.
+## Mode: Review
 
-If invoked with `--all`, review the entire codebase.
+This skill operates in review mode. It produces findings and presents them as numbered suggestions for the user to accept or reject. Use `format-code` for the autonomous fix mode.
+
+## Procedure
+
+1. **Load the style guide** per the section above.
+2. **Determine scope** per Section 3 Step 1 of the orchestration framework. Default is changed lines only (`git diff` and `git diff --staged`); `--all` reviews the entire codebase.
+3. **Follow the framework** - produce a task manifest per Section 3 Steps 2-5, launch tasks per Step 6, compile results per Step 7. The framework specifies which tasks, which models, which files to read, and how to filter findings to the scope.
+4. **Do NOT run post-edit checks** - review mode does not apply fixes, so post-edit checks (line length, etc.) have nothing to verify. They run only in fix mode.
+5. **Present the findings** as a terse numbered list (see Output Format below).
+6. **Wait for user input.** Apply only what the user asks for.
 
 ## Output Format
 
-Present violations as a terse numbered list:
+Present findings as a terse numbered list:
 
 ```
 1. lib/device/modbus.ex:15 - @impl true should name the behaviour: @impl GenServer
@@ -37,37 +49,19 @@ Present violations as a terse numbered list:
 ```
 
 Do not explain reasoning unless the user asks. The user can:
-- `explain #N` -explain the reasoning behind suggestion N
-- `apply #N` -apply a specific suggestion
-- `apply all` -apply all suggestions
-- `skip` -dismiss all suggestions
+- `explain #N` - explain the reasoning behind suggestion N
+- `apply #N` - apply a specific suggestion
+- `apply all` - apply all suggestions
+- `skip` - dismiss all suggestions
 
-## Procedure
-
-1. Load the style guide (see above)
-2. Identify changed files via `git diff --name-only` and `git diff --staged --name-only`
-3. Run mechanical checks on the changed files (see the format-code skill for the checklist) - these find patterns that are difficult to detect by reading code
-4. Read each changed file
-
-The following passes are distinct review concerns (see format-code skill for full details on each). For small diffs, run all passes sequentially. For large diffs or `--all` reviews, each pass should be a separate cold agent reporting to the orchestrator.
-
-5. **Structural pass** - file-level ordering and grouping (see format-code for full checklist)
-6. **Mechanical check review** - evaluate grep/awk results against style rules
-7. **Identifier scan** - apply the detokenize technique from the general guide's Precision Over Length rule to detect abbreviations and grammar problems
-8. **Comment quality pass** - redundant comments, comments-as-names signals, "what" comments that should be "why". When a comment explains what a literal value represents, the representation is wrong - flag the representation, not just the comment.
-9. **Code style pass** - line-level formatting, whitespace, idioms, brace placement
-
-After all passes:
-
-10. Present the numbered list (all findings combined, grouped by pass)
-11. Wait for user input
-12. Apply requested changes using the Edit tool
+When applying suggestions, use the Edit tool directly. Do not delegate to subagents.
 
 ## Important
 
-- Do NOT delegate style fixes to Sonnet subagents. Sonnet lacks the judgment to distinguish between similar style cases and will apply rules incorrectly. Apply all fixes directly as the Opus review agent.
-- Do NOT change program logic or behavior - only flag style issues
-- ESpec matchers (`be_integer()`, `be_alive()`, `be_truthy()`) are function calls - do NOT flag their parentheses
-- Trailing commas are valid in collections but NOT in function argument lists
-- When in doubt about whether something is a violation, do not flag it
-- Suggestions, not mandates - the user decides
+- Do NOT delegate style fixes to Sonnet subagents. The lead applies all fixes directly.
+- Do NOT change program logic or behavior - only flag style issues.
+- ESpec matchers (`be_integer()`, `be_alive()`, `be_truthy()`) are function calls - do NOT flag their parentheses.
+- Trailing commas are valid in collections but NOT in function argument lists.
+- When in doubt about whether something is a violation, do not flag it.
+- Suggestions, not mandates - the user decides.
+- Apply the framework's group cohesion exception when presenting suggestions: if a change is part of a group of related code, the suggestion may include touching unchanged lines within the group to maintain visual consistency. Note this in the suggestion text.
