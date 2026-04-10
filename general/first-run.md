@@ -28,9 +28,10 @@ Use the absolute path of the styleguides directory. Only `general/CLAUDE.md` nee
 Copy the formatting skills from the styleguides repo into the project's `.claude/skills/` directory. This makes them auto-discoverable by Claude Code.
 
 ```
-mkdir -p .claude/skills/format-code .claude/skills/format-review .claude/skills/update-styleguide
+mkdir -p .claude/skills/format-code .claude/skills/format-review .claude/skills/style-report .claude/skills/update-styleguide
 cp <repo_root>/skills/format-code/SKILL.md .claude/skills/format-code/SKILL.md
 cp <repo_root>/skills/format-review/SKILL.md .claude/skills/format-review/SKILL.md
+cp <repo_root>/skills/style-report/SKILL.md .claude/skills/style-report/SKILL.md
 cp <repo_root>/skills/update-styleguide/SKILL.md .claude/skills/update-styleguide/SKILL.md
 ```
 

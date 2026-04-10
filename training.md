@@ -59,7 +59,7 @@ Rules are developed in a separate working environment and synced to this reposit
 When reviewing candidate rules extracted from source material (books, style guides, codebases), follow this process for each rule:
 
 1. **Present the rule** — print the rule with observations. If the rule matches a convention in the user's code, bias toward the user's style and cite it. Note other authors and their opinions on similar rules.
-2. **Pattern file** — write code examples to a `.c` (or language-appropriate) file in `patterns/` for user review. The user will edit formatting or add comments to clarify the rule.
+2. **Pattern file** — write code examples to a pattern file for user review. See the Pattern Files section below for the format and when pattern files apply.
 3. **Document and record** — once the user approves, write the rule into the language's `CLAUDE.md` (e.g. `c/CLAUDE.md`) following the standard rule format: intent, convention, examples (`// good` / `// avoid`), when to deviate. Update memory with which rules are complete.
 4. **Validate examples compile** — verify that all `// good` examples in the section actually compile and run correctly. Build a test file with scaffolding (type stubs, dummy functions) that includes the examples as real code. If an example doesn't compile, fix it. Examples that don't compile teach agents broken patterns.
 5. **Next rule or section validation:**
@@ -67,6 +67,47 @@ When reviewing candidate rules extracted from source material (books, style guid
    - If the section is complete, run a cold Sonnet agent to generate code following the documented rules. Refine rules until the agent writes correct code.
 6. **Cold Opus review** — run an Opus cold reviewer that audits all examples against all rules (not just the rule they demonstrate). The main agent validates each finding, implementing only confirmed improvements. If any changes affect agent behavior, return to step 5 and retest with a cold generation agent.
 7. **Checkpoint** — review session context, ensure all knowledge is documented. Mark the section complete and update memory.
+
+---
+
+## Pattern Files
+
+Pattern files are the medium for collaborating on language rules. The training agent writes a pattern file when proposing a new rule or modifying an existing one; the user reviews and edits the file directly to refine the rule.
+
+### What a pattern file is
+
+A pattern file is a **source code file in the language of the rule being reviewed**, written to `patterns/` in the styleguides repo. C rules get `.c` files. Elixir rules get `.ex` or `.exs` files. Rust rules get `.rs` files. The file contains real code examples demonstrating the rule, reviewable and editable in the medium the rule actually governs.
+
+A pattern file is NOT a markdown document describing a rule. Markdown is not the language the rule exists in, and reviewing a rule by editing prose defeats the purpose of having concrete examples. If a rule is important enough to document, the examples are important enough to show in their native form.
+
+### Structure
+
+- **Top-level comment** explaining the rule: what it is, the background that prompted it (training scenario, field report, user observation), what the rule changes relative to the current state of the guide, and what the rule does NOT change.
+- **Code examples** in the language of the rule, using the language's comment convention to mark `// good` and `// avoid` cases. Examples should be realistic and exercise the rule's intent.
+- **Inline comments** clarifying specific points - why an example is good or bad, what a reader should notice, edge cases.
+
+The file should be syntactically valid (or close to it) so that language-aware tooling can assist review. Include minimal scaffolding (`#include` lines, empty function bodies) to achieve this. The file does not have to compile or run - it is for review, not execution - but it should not contain syntax errors that obscure the examples.
+
+### When to write a pattern file
+
+Write a pattern file when:
+- Proposing a new rule for a language guide (e.g. `c/CLAUDE.md`, `elixir/CLAUDE.md`)
+- Modifying an existing language rule
+- Demonstrating a code pattern the user needs to see to evaluate the rule
+
+Write the pattern file **as part of presenting the rule**, not after the user asks for it. The user reviews rules by editing pattern files; presenting a rule without the file means an extra round-trip.
+
+### When NOT to write a pattern file
+
+Do NOT write a pattern file for:
+- Agent instructions, workflow rules, orchestration frameworks, training processes. These are logical instructions about how agents operate, not source-code rules. Discuss them in the console and edit the target file directly (`training.md`, `general/agents.md`, `general/review-orchestration.md`, etc.).
+- Rules that do not need code to clarify. If the rule is purely logical (e.g. "do not checkpoint during discovery"), prose discussion is clearer than a contrived code example.
+
+If uncertain, ask: "does this rule involve source code the user needs to see to evaluate it?" If yes, pattern file. If no, direct discussion.
+
+### Cleanup
+
+Delete pattern files after the rule is approved and written into the language guide. Pattern files are working artifacts, not permanent documentation - the language guide is the canonical source of truth. Leaving pattern files around after approval causes confusion about which document defines the rule.
 
 ---
 
@@ -368,9 +409,85 @@ When adding or modifying rules, audit all `# good` examples in the affected file
 
 ## Privacy
 
-All examples in this repository must be generic and domain-neutral. No project-specific code, module names, or identifiable details from private codebases. Source codebases used for training are read-only input — their content is not reproduced here.
+All examples in this repository must be generic and domain-neutral. No project-specific code, module names, or identifiable details from private codebases. Source codebases used for training are read-only input - their content is not reproduced here.
 
 Pre-existing committed content (human-written, in git history before AI sessions) is exempt from this requirement.
+
+### Term sanitization
+
+Difficulty reports from project agents contain real identifiers from private codebases. Before incorporating report findings into the guide, replace project-specific terms with generic equivalents. The goal is that no reader of the public guide can identify the source project.
+
+Categories requiring sanitization:
+- Module, function, type, and variable names specific to the source project
+- Domain terminology that identifies the project's industry, product, or client
+- Protocol, standard, or hardware identifiers that narrow the field to a specific system
+- Internal concept names (data structures, state machines, subsystems) that are not generic technical terms
+
+The training agent maintains a prohibited terms list in memory. This list is built incrementally during ingestion - when a project-specific term is identified, it is added so future sessions catch it without re-discovering it. The list itself is private to the training agent's memory and never written to public files, including training documentation. Concrete examples of prohibited terms cannot appear in the public guide without defeating the purpose of sanitizing them.
+
+The test for whether a term needs sanitization: could this term appear naturally in an unrelated project working in a different domain? Generic technical concepts (sensor, connection, registry, parser, packet, buffer) pass the test. Terms that identify a specific product, protocol, or proprietary system do not.
+
+When uncertain, prefer sanitizing. A false positive produces a slightly more generic example; a false negative leaks project information into a public document and cannot be retracted.
+
+---
+
+## Difficulty Reports
+
+When a project agent encounters a gap or error in the style guide during real work, it generates a difficulty report. The report is the primary feedback mechanism from project use back to rule development.
+
+### Project agent side
+
+The instructions the project agent follows to generate a report live in `skills/style-report/SKILL.md`. That skill is copied into projects at first-run and exposes the `/style-report` slash command. It contains: when to file a report, what to capture, the report format, and the report location. The training agent does not need to maintain a duplicate copy of these instructions here - if the project-agent-side process needs to change, edit the skill, not this file.
+
+**Summary of what the skill produces** (for the training agent's reference):
+- Reports live at `.claude/reports/style/style_report_<YYYY-MM-DD-HHMMSS>.md` in the project (or a path the project overrides in its CLAUDE.md)
+- Each report has a header with `styleguide-commit` (hash at time of finding) and `date`
+- Each finding has `file`, `section`, `says`, `should-say`, `evidence` (including model/role), `resolved`
+- Reports are transient - a new file per batch, not appended to prior reports
+
+The training agent's responsibility begins when a report arrives in its environment. See Report Ingestion below.
+
+---
+
+## Report Ingestion
+
+When a difficulty report arrives from a project agent, the training agent processes it through validation before applying changes.
+
+### Ingestion process
+
+1. **Read the full report** - the lead training agent reads the report directly, not through a subagent summary. Every subsequent judgment (validation, cross-file impact, sanitization, correct-observation-wrong-conclusion calls) depends on understanding exactly what was reported, and a summary is lossy. Reports are short enough that delegation adds no value. Understand all findings before changing anything.
+2. **Check the styleguide commit** - if the report references an older commit, run `git log <report-commit>..HEAD -- <relevant files>` to see if any finding was already addressed. Skip findings that are already fixed.
+3. **Validate each finding** against the current guide. Most validation is interpretation-based and handled by the lead directly:
+   - Does the guide actually say what the report claims? Read the cited section.
+   - Is the "should-say" consistent with the guide's existing principles?
+   - Could the finding be a misunderstanding by the project agent rather than a guide gap?
+   - Does the evidence support the conclusion? A correct observation can lead to a wrong recommendation.
+
+   Delegate to cold agents only when independent verification is needed:
+   - **Reproduction** - if a finding claims "the agent produces pattern X when given prompt Y," launch a fresh cold agent with the reported model to attempt reproduction. The lead cannot verify this from its own context.
+   - **Blind re-review of evidence** - if the report includes code and claims violations, a cold reviewer reading the code without the report's "says/should-say" framing catches cases where the project agent misread its own code.
+   - **Model assignment check** - the reporting model is a data point, not ground truth. If a finding is reproduced, the lead has a decision to make: was this the right model for the task in the first place? Test with other models to characterize the issue:
+     - If all models fail (including Opus), the rule needs strengthening.
+     - If only the reporting model fails, the task may have been assigned to the wrong model for its attention requirements (see `general/agents.md`). The fix is updating model assignment guidance, not the rule text.
+     - If a single-concern Haiku handles it but a multi-concern Sonnet pass misses it, the task should be decomposed rather than the rule strengthened.
+     Choose the fix that matches the root cause.
+4. **Sanitize** - the lead performs sanitization directly, not via a subagent. The prohibited terms list lives in the lead's memory; delegating would either leak the list into a subagent's context or force the subagent to ask the lead about each candidate, which defeats delegation. The lead also discovers new terms during sanitization and adds them to memory as it goes - a subagent can only report candidates, not update the authoritative list. Choosing a good generic equivalent requires the same context as validation (understanding what the finding is about), so the work is naturally co-located. For very large reports, mitigate fatigue by batching the ingestion itself (validate + sanitize + apply a few findings at a time, compact between batches) rather than delegating sanitization.
+5. **Identify cross-file impact** - a single finding may affect multiple files. A naming convention finding may touch the language guide, the mechanical checks in format-code, and the agent recommendations in agents.md.
+6. **Apply validated changes** - the lead applies edits directly, by default. Edits to the guide are high-stakes (wrong edits corrupt the canonical source), and judgment remains after validation: placement, integration with surrounding rules, format consistency, and cross-file coherence. A subagent with clear instructions still has to exercise judgment to turn instructions into correct text in context, and if the lead has to verify every subagent edit anyway, delegation saves little.
+
+   Delegation is justified only for very large reports with mechanical edits (e.g. adding many terms to a list, updating many grep patterns). In those cases, scope a single-concern subagent per edit type and verify each edit before moving on. Cross-cutting edits (a single finding that touches multiple files in coordinated ways) stay with the lead regardless of report size, because they require holding multiple files in coherent state during the edit.
+
+   Present changes to the user for review before or after applying, depending on volume and complexity.
+7. **Update mechanical checks** - if a finding reveals a pattern that grep can catch, add it to the mechanical checks in `skills/format-code/SKILL.md`.
+
+### What to watch for
+
+- **New rules require user review and approval.** This style guide is opinionated. Reports are input signals, not mandates. A finding that proposes a new rule - not a clarification of an existing one - is an editorial decision that shapes the guide's direction. The lead presents the proposed rule to the user for approval before writing it. Do not add new rules to the guide from a report without explicit user sign-off, even if the finding is well-evidenced.
+- **Rule intent changes also require user review.** Modifications that loosen, expand, or reinterpret an existing rule change the guide's opinion, not just its text. Treat these with the same review bar as new rules. Clerical changes (adding a missed abbreviation to a list, tightening a grep pattern, fixing a broken example) do not need this level of review.
+- **Correct observation, wrong conclusion.** The project agent may correctly identify that something is awkward but propose the wrong fix. Validate the recommendation against the guide's principles, not just the evidence.
+- **Scope creep.** A finding about one specific case may be generalized too broadly in the "should-say." Apply the minimum change that addresses the evidence.
+- **Model-specific findings.** If a finding is about which model to use for a task, it belongs in `general/agents.md`, not in the language guide or testing guide.
+- **Rule loosening.** The project agent may propose expanding a rule to cover a case it encountered. Check whether the expansion undermines the original rule's intent before proposing it to the user.
 
 ---
 

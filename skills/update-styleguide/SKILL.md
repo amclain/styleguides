@@ -32,6 +32,7 @@ After a successful pull, update the project's local skill copies:
 ```
 cp <repo_root>/skills/format-code/SKILL.md .claude/skills/format-code/SKILL.md
 cp <repo_root>/skills/format-review/SKILL.md .claude/skills/format-review/SKILL.md
+cp <repo_root>/skills/style-report/SKILL.md .claude/skills/style-report/SKILL.md
 cp <repo_root>/skills/update-styleguide/SKILL.md .claude/skills/update-styleguide/SKILL.md
 ```
 

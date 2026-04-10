@@ -50,7 +50,11 @@ app_app_connection_open(&conn, &config);
 
 Good C names will be longer than equivalent names in languages with modules or namespaces. This is expected - the global namespace requires each name to carry its full context.
 
-Do not abbreviate `buffer` to `buf`, `length` to `len`, `message` to `msg`, `source` to `src`, or `destination` to `dst`. Write the full word. Use `size` as a concise alternative to `length` where appropriate (e.g. `buffer_size` instead of `buffer_length`). Accepted short forms: `ptr` (pointer), `fd` (file descriptor), `cb` (callback) - these are domain terms, not abbreviations.
+Do not abbreviate `buffer` to `buf`, `length` to `len`, `message` to `msg`, `source` to `src`, `destination` to `dst`, or `checksum` to `cksum`. Write the full word. Use `size` as a concise alternative to `length` where appropriate (e.g. `buffer_size` instead of `buffer_length`). Accepted short forms: `ptr` (pointer), `fd` (file descriptor), `cb` (callback) - these are domain terms, not abbreviations.
+
+Standard acronyms from formal specifications (RFCs, IEEE standards) are acceptable in constant names when the acronym is the term used in the specification. Examples: `IHL` (Internet Header Length, RFC 791), `DSCP` (Differentiated Services Code Point, RFC 2474), `ECN` (Explicit Congestion Notification, RFC 3168), `TTL` (Time To Live). Spelling these out (`INTERNET_HEADER_LENGTH`) would make the identifiers harder to cross-reference with the source documentation. When RFC acronyms are used, add a comment referencing the relevant RFCs - either above the `#define` group or as a top-level file comment if the RFCs apply to the entire file. This follows the general guide's Documentation Notation rule: write it in the notation the documentation uses.
+
+When a constant name includes a unit of measurement, use the `_IN_<unit>` pattern: `FILTER_TIMEOUT_IN_NS` not `FILTER_TIMEOUT_NS`. `_IN_NS` reads as "in nanoseconds" which is unambiguous. `_NS` alone could be misread as a namespace prefix. Standard unit abbreviations (`NS`, `MS`, `S`, `MB`, `KB`) are acceptable in measurement suffixes even though the general abbreviation rule says to write full words - unit abbreviations are standardized and universally understood, the identifier context makes them unambiguous, and measurement names are already long.
 
 CAUTION: Abbreviations are invisible when reading identifiers as code tokens. See the general guide's Precision Over Length CAUTION for the detokenize technique. In C, also strip the namespace prefix before reading: `app_src_port` → "src port" → abbreviated.
 
@@ -618,6 +622,44 @@ if (result < 0)
 
 ---
 
+### File-Level Documentation
+
+**Intent**: File headers provide high-level context about the module's purpose and its external references.
+
+**Convention**: Every `.h` file should have an `@file` Doxygen block immediately after the license header (or after `#pragma once` if no license header). This is the public API documentation. Separate `@file` and `@brief` with a blank line - both are top-level tags and the visual separation makes them easier to scan. The body paragraph is optional - if the `@brief` is sufficient, do not force a description that restates it.
+
+```c
+/**
+ * @file sensor.h
+ *
+ * @brief Sensor reading and calibration interface.
+ */
+#pragma once
+```
+
+`.c` files only get an `@file` header when the implementation needs clarification that the `.h` does not provide - external knowledge references (RFC links, protocol specifications), complex algorithms, or non-obvious design choices. Most `.c` files are straightforward implementations of their `.h` and do not need a header. `main.c` (glue/entry point) does not need a header - application-level documentation belongs in the project README. Do not append "implementation" to `.c` briefs - it is redundant with the file extension.
+
+When listing protocol references (RFCs, IEEE standards) in a file header comment, keep all entries at the same indentation level with columns vertically aligned. Do not indent entries hierarchically to show specification relationships. The reference list is a lookup table for "which RFC defines this field," not a taxonomy.
+
+```c
+/**
+ * @file packet.c
+ *
+ * @brief IPv4/TCP/UDP packet construction and parsing.
+ *
+ * Reference RFCs:
+ *   IPv4   RFC 791
+ *   TCP    RFC 793
+ *   UDP    RFC 768
+ *   DSCP   RFC 2474
+ *   ECN    RFC 3168
+ */
+```
+
+**When to deviate**: If a `.c` file provides information that callers benefit from but that does not belong in the `.h` header (e.g. algorithm descriptions, protocol state machines), a file header is appropriate.
+
+---
+
 ### Line Breaks in Long Expressions
 
 **Intent**: When an expression must span multiple lines, the break point should make the continuation immediately obvious.
@@ -852,7 +894,7 @@ typedef struct {
 
 **Convention**: The general style guide deprecates vertical alignment of code symbols. In C, two exceptions apply:
 
-1. **`#define` groups** - right-justify values (ones column aligned) within related groups of constants. The largest value should be at least one tab stop from the longest constant name. Each group is its own alignment context - separate groups (e.g. max constants vs. sentinel values) do not share a column. Right-justification makes magnitudes visually comparable; left-justification creates ragged right edges that are hard to scan as a column of numbers.
+1. **`#define` groups** - right-justify values (ones column aligned) within related groups of constants. The largest value should be at least one tab stop from the longest constant name. Each group is its own alignment context - separate groups (e.g. max constants vs. sentinel values) do not share a column. Right-justification makes magnitudes visually comparable; left-justification creates ragged right edges that are hard to scan as a column of numbers. A solo define (or a group of one) uses 1-2 tab stops (>= 2 spaces) between the name and value - it should not stretch to match an adjacent group's wider column. Excessive whitespace on a solo define looks like a formatting error rather than intentional alignment.
 2. **Inline comments** - align inline comments across related lines. Unaligned comments become visual noise. This includes `///<` trailing docs on struct fields and enum values - all `///<` comments in a group must start at the same column.
 
 CAUTION: After writing a struct or enum with `///<` comments, verify all comments in the group start at the same column. One field name longer than the others causes misalignment.

@@ -12,6 +12,22 @@ This file defines style principles that apply across all languages. Language-spe
 - Explain on demand. Default output is terse (a numbered list of suggestions). Reasoning is available if asked.
 - Whitespace is a tool. Use it to move the reader's eye through the code and accentuate areas of importance — not excessively, but purposefully.
 
+## Reading This Guide
+
+Any agent applying this guide must read it in full. Do not skim, do not rely on training-data patterns for the language, and do not substitute common conventions from other style guides for the text below. When loading a guide file, use a single Read call per file with no offset or limit.
+
+Training data is wrong about this project's conventions in specific ways that this guide documents explicitly. Relying on training data is the most common failure mode for style review and code generation agents. It produces output that cites rules this guide does not contain, misses rules this guide does contain, and applies conventions from unrelated languages.
+
+This rule applies to every agent role that interacts with the guide:
+
+- **Code generation agents** load the guide before writing code, not after. Generating first and then checking against the guide is not equivalent - the guide shapes the output, it does not filter it.
+- **Review agents** (including post-generation review and style review) load the guide before evaluating code. Every finding must reference a rule name from the loaded files; if an agent cannot cite a rule from the guide, it is not applying the guide.
+- **Training agents** load the guide before validating report findings or evaluating candidate rules against existing content.
+
+**Which files to read** depends on the task context - the entry point (project CLAUDE.md `@` import, `skills/format-code/SKILL.md`, `patterns/review_orchestration.md`, or `training.md`) lists the specific files required for that task. This section defines *how* to load, not *which* files.
+
+**Detection**: if an agent produces output that cites a rule not present in the loaded files, or uses terminology from a different language's guide, it did not read the guide and its output is unreliable. Retry the task after verifying the agent performs the required Read calls.
+
 ## Operating Modes
 
 This style guide supports two modes. The agent determines the active mode from context (the user's request, the trigger phrase, or the task at hand). Check memory for the user's model preferences for each mode - see `general/first-run.md`. For guidance on which models to use for which tasks, agent roles, and multi-agent orchestration, see `general/agents.md`.
@@ -41,6 +57,8 @@ If the user's preferred review model is different from the generation model (e.g
 ### Style Review
 
 When reviewing code, default to scoping suggestions to changed lines only. Run `git diff` and `git diff --staged` to identify what changed; read the full file for context; flag issues only in the changed lines. This mirrors how a human reviewer works on a pull request. The entire codebase can also be reviewed if the user asks - this is not the default. The user's preferred review model is saved in memory from the first-run check.
+
+Style review is a multi-agent workflow with specific task decomposition, model assignments, and ordering constraints. The full orchestration framework is in `general/review-orchestration.md`. The lead agent (the agent acting on the user's request) must load that document before launching review work - it defines task types, required reading per task, scope handling, group cohesion exceptions, and quality signals. Do not improvise the orchestration based on prior knowledge; the framework captures specific failure modes that generic review approaches miss.
 
 This system is intended to replace mechanical formatters (e.g. `mix format`, `rubocop`, `clang-format`). Unlike mechanical tools, it applies rules contextually and understands intent.
 
