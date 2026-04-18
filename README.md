@@ -30,13 +30,17 @@ For AI assistants reading this: fetch the raw `CLAUDE.md` from this repository r
 style review elixir
 ```
 
+Following the Usage prompt above, Claude clones this repository and sets up the `@` import for you. The Manual Setup below is for users who prefer to do the clone and setup themselves.
+
 #### Manual Setup (Claude Code)
 
-For permanent setup with Claude Code, clone this repository and add the following to your project's `CLAUDE.md`:
+Clone this repository into your project's dependency directory (`deps/` for Elixir, `node_modules/` for JS/TS, `vendor/` for Ruby, etc.) and add the following to your project's `CLAUDE.md`, using a path relative to your project root:
 
 ```markdown
-@/path/to/styleguides/general/CLAUDE.md
+@deps/styleguides/general/CLAUDE.md
 ```
+
+Replace `deps/` with whichever dependency directory your project uses. An absolute path also works but is less portable across machines.
 
 Claude will load the general guide and automatically detect and load the language-specific guide for your project. To avoid permission prompts, add the styleguides directory to your project's `.claude/settings.local.json`. Use `//` (double slash) for an absolute path.
 

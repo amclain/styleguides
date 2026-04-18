@@ -51,13 +51,27 @@ Use this table to pick the right workflow. Each workflow has a dedicated section
 | "Audit the examples" / after adding or modifying rules | [Example Audit](#example-audit) |
 | "Generate the README" / after rules are complete in a language | [Generating Human-Readable Documentation](#generating-human-readable-documentation) |
 
-If the user's input doesn't obviously map to a workflow, ask rather than guess. Improvising outside these workflows is how the guide gets damaged.
+If the user's input doesn't obviously map to a workflow, ask rather than guess. Improvising outside these workflows is how the guide gets damaged. Once a workflow is active, stay in it until its final step completes — see [Workflow Discipline](#workflow-discipline). Do not declare the workflow done before the last step, and do not treat "what's next?" as an invitation to switch workflows.
 
 ---
 
 ## Always-Active Behaviors
 
 These apply to every training session, regardless of which workflow is active.
+
+### Workflow Discipline
+
+When a workflow from the Trigger Table is active, it is the authoritative procedure for the work in progress. Follow its steps in order. Do not improvise steps, skip steps, or declare the workflow complete until its final step has been performed.
+
+**Locate your position before answering "what's next."** When the user asks what to do next, the answer is the next unfinished step of the active workflow — not a menu of adjacent tasks, not a fresh suggestion. If you are not sure which step you are on, re-read the workflow from the top, identify which steps have been completed this session, and report the first incomplete step.
+
+**A workflow is not complete until its final step has been executed.** Writing some of the changes a workflow prescribes is not completing the workflow. Applying findings is not completing. The workflow ends when its last numbered step has been performed, not when you feel the substantive work is done.
+
+**Step skips must be called out, not silently accepted.** If the workflow lists a step you did not perform (e.g. Report Ingestion step 3's cold-agent delegation for reproduction, blind re-review, or model assignment check), state explicitly that the step was skipped and why. Do not treat unperformed steps as "didn't apply" unless the workflow itself documents when the step is conditional.
+
+**Re-reading the workflow is cheap; improvising is expensive.** If a user push-back suggests you are outside the workflow, re-read it immediately. The failure mode this prevents: treating the workflow as a list you already absorbed and can execute from memory. You cannot. Re-read it.
+
+**When multiple workflows could apply, pick one and commit.** Do not bounce between "is this Rule Development or Report Ingestion?" mid-task. If the user's input triggered one workflow, stay in it until complete. If it turns out to be the wrong workflow, the user will redirect — but partial execution of two workflows produces worse output than complete execution of one.
 
 ### Git Usage
 
@@ -169,6 +183,8 @@ Use when reviewing candidate rules extracted from source material (books, extern
 ### Report Ingestion
 
 Use when a difficulty report arrives from a project agent. The report is the primary feedback mechanism from project use back to rule development.
+
+**This workflow has 8 steps. All are required unless the workflow itself documents a step as conditional** (e.g. Step 3's cold-agent delegation options fire only when the listed conditions are met; Step 7 fires only when a finding reveals a greppable pattern). The ingestion is not complete until Step 8 has been executed. Partial execution — landing some changes without running validation, sanitization, or cold review — is not completion. See [Workflow Discipline](#workflow-discipline).
 
 #### Project agent side (reference)
 
@@ -615,7 +631,21 @@ Delete pattern files after the rule is approved and written into the language gu
 
 ---
 
+## Adding a New Language
+
+1. Create `<lang>/CLAUDE.md` using the rule format defined in `general/CLAUDE.md`.
+2. Point Claude at representative existing codebases: *"Read these files and draft a CLAUDE.md capturing the style conventions."*
+3. Review and edit the output — add missed rules, remove false patterns, resolve ambiguities.
+4. Generate the human-readable `README.md` from `CLAUDE.md`.
+5. Test on a new codebase and iterate.
+
+See [Rule Development Workflow](#rule-development-workflow) and [Rule Review (from findings)](#rule-review-from-findings) for the development cycle details.
+
+---
+
 ## File Roles (Reference)
+
+For the authoritative repository layout, see the Repository Structure section in `general/CLAUDE.md`. This list adds training-agent-specific load-context annotations for each file — when it loads, who reads it, what triggers it. Update this list when roles change; keep the tree in `general/CLAUDE.md` as the single source for the directory layout itself.
 
 - `general/CLAUDE.md` — general principles for all languages; loaded first in every session.
 - `general/collaboration.md` — working with users under uncertainty; loaded via `@` import from general/CLAUDE.md.

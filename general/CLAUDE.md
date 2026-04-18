@@ -2,7 +2,11 @@
 
 # General Style Guide
 
-This file defines style principles that apply across all languages. Language-specific rules are in `<lang>/CLAUDE.md`.
+This is Alex's AI-native code style system, designed to be used with Claude Code. This file defines style principles that apply across all languages. Language-specific rules are in `<lang>/CLAUDE.md`.
+
+## Philosophy
+
+This system replaces mechanical formatters and linters. Mechanical tools apply rigid rules blindly — they often degrade readability by following prescribed patterns without understanding intent. This system reviews code the way a skilled human reviewer would: applying rules contextually, offering soft suggestions, and deferring to the author's judgment.
 
 **Precedence in the codebase takes priority over this guide.** When in doubt, follow the style of the existing code. A project that presents itself as a consistent piece of work is easier to read than one that follows global rules but clashes with itself.
 
@@ -11,6 +15,17 @@ This file defines style principles that apply across all languages. Language-spe
 - Suggestions, not mandates. The reviewer suggests; the author decides.
 - Explain on demand. Default output is terse (a numbered list of suggestions). Reasoning is available if asked.
 - Whitespace is a tool. Use it to move the reader's eye through the code and accentuate areas of importance — not excessively, but purposefully.
+
+The system has two operating modes (review and fix) — see **Operating Modes** below for behavior details.
+
+## Loading Style Guides
+
+When reviewing or generating code in any language, load the relevant guides before proceeding:
+
+1. Read `general/CLAUDE.md` (this file) — general style principles that apply to all languages.
+2. Read `<lang>/CLAUDE.md` — rules specific to the language being reviewed or written.
+
+Detect the language from context: file extension, syntax, or what the user states. Do not wait to be asked — load the guides proactively whenever a style task is underway. Additional files (e.g. `<lang>/testing.md`, `general/testing.md`, `general/review-orchestration.md`) are loaded on demand per the entry point's instructions.
 
 ## Reading This Guide
 
@@ -22,15 +37,21 @@ This rule applies to every agent role that interacts with the guide:
 
 - **Code generation agents** load the guide before writing code, not after. Generating first and then checking against the guide is not equivalent - the guide shapes the output, it does not filter it.
 - **Review agents** (including post-generation review and style review) load the guide before evaluating code. Every finding must reference a rule name from the loaded files; if an agent cannot cite a rule from the guide, it is not applying the guide.
-- **Training agents** load the guide before validating report findings or evaluating candidate rules against existing content.
 
-**Which files to read** depends on the task context - the entry point (project CLAUDE.md `@` import, `skills/format-code/SKILL.md`, `general/review-orchestration.md`, or `training.md`) lists the specific files required for that task. This section defines *how* to load, not *which* files.
+**Which files to read** depends on the task context - the entry point (project CLAUDE.md `@` import, `skills/format-code/SKILL.md`, or `general/review-orchestration.md`) lists the specific files required for that task. This section defines *how* to load, not *which* files.
 
 **Detection**: if an agent produces output that cites a rule not present in the loaded files, or uses terminology from a different language's guide, it did not read the guide and its output is unreliable. Retry the task after verifying the agent performs the required Read calls.
 
 ## Operating Modes
 
-This style guide supports two modes. The agent determines the active mode from context (the user's request, the trigger phrase, or the task at hand). Check memory for the user's model preferences for each mode - see `general/first-run.md`. For guidance on which models to use for which tasks, agent roles, and multi-agent orchestration, see `general/agents.md`.
+Running `mix format` (or the equivalent for the language) invokes the AI reviewer. Two modes are available:
+
+- **Review mode** (`format-review` skill): a numbered list of suggestions for the user to accept or reject. Nothing is changed until the user asks.
+- **Fix mode** (`format-code` skill): violations are corrected autonomously. This is also the default for post-generation review after an agent writes code — cleaning up an agent's own output does not require per-change user approval.
+
+The user controls which mode applies. `format-review` is the interactive default when the user runs a style review themselves; `format-code` is what post-generation review invokes automatically.
+
+The agent determines the active mode from context (the user's request, the trigger phrase, or the task at hand). Check memory for the user's model preferences for each mode - see `general/first-run.md`. For guidance on which models to use for which tasks, agent roles, and multi-agent orchestration, see `general/agents.md`.
 
 ### Code Generation
 
@@ -71,6 +92,14 @@ Report a summary of what was changed (file, rule, what was fixed).
 
 ### Style Review
 
+Style review is triggered by the language formatter plugin (e.g. `mix format`) which launches an interactive Claude Code session with this style guide pre-loaded. The trigger phrase in the initial prompt controls review behavior:
+
+| Trigger phrase | Behavior |
+|---|---|
+| `style review <lang>` | Review changed code only (default) |
+| `style review <lang> --all` | Review entire codebase |
+| `style review <lang> --rewrite` | Apply the style guide as written; do not defer to codebase precedence. Typical use: a freshly scaffolded project whose existing patterns should be rewritten, not learned from. `--styleguide-precedence` is an accepted alias. |
+
 When reviewing code, default to scoping suggestions to changed lines only. Run `git diff` and `git diff --staged` to identify what changed; read the full file for context; flag issues only in the changed lines. This mirrors how a human reviewer works on a pull request. The entire codebase can also be reviewed if the user asks - this is not the default. The user's preferred review model is saved in memory from the first-run check.
 
 Style review is a multi-agent workflow with specific task decomposition, model assignments, and ordering constraints. The full orchestration framework is in `general/review-orchestration.md`. The lead agent (the agent acting on the user's request) must load that document before launching review work - it defines task types, required reading per task, scope handling, group cohesion exceptions, and quality signals. Do not improvise the orchestration based on prior knowledge; the framework captures specific failure modes that generic review approaches miss.
@@ -88,6 +117,73 @@ If the user asks what capabilities are available, describe all options:
 **Applying suggestions:** if the user asks you to apply a suggestion or act as a formatter, make the change directly. The default is to suggest; applying is opt-in.
 
 **Git operations are read-only.** Formatter skills (style review, post-generation review, `/format-code`, `/format-review`, `/format-rewrite`) may read git state (`git status`, `git diff`, `git log`, `git check-ignore`) to determine review scope, but never write git state. Do not `git add`, `git commit`, `git stash`, `git restore`, `git checkout <file>`, or any other operation that mutates the repo or working tree. After applying fixes to files, report what changed and stop - the user reviews with `git diff` and commits on their own. This constraint applies to every formatter skill.
+
+---
+
+## Rule Format
+
+Each language's `CLAUDE.md` defines rules in this structure:
+
+```
+### Rule Name
+
+**Intent**: what this achieves for the reader
+
+**Convention**: the preferred pattern
+
+**Example**:
+  # good
+  ...
+
+  # avoid
+  ...
+
+**When to deviate**: conditions where the rule should not be applied
+```
+
+---
+
+## File Roles
+
+Each language directory maintains two files:
+
+- **`CLAUDE.md`** — source of truth. AI-friendly. May contain CAUTION callouts and implementation guidance not intended for human readers.
+- **`README.md`** — human-readable rendering of the same rules. CAUTION callouts and internal guidance are excluded. Rendered automatically by GitHub when browsing the directory.
+
+`CLAUDE.md` is authoritative. `README.md` is derived and regenerated whenever `CLAUDE.md` changes.
+
+---
+
+## Repository Structure
+
+Use this to navigate to the file you need. General principles live at the top; language-specific rules live in the language directory; cross-cutting concerns (testing, agent orchestration, collaboration) have their own files loaded on demand.
+
+```
+general/
+  CLAUDE.md          # General style principles applying to all languages (this file)
+  collaboration.md   # Working with users under uncertainty (loaded via @ import)
+  agents.md          # Agent capabilities, roles, scoping, and fatigue (loaded on demand)
+  first-run.md       # First-run project checks (loaded once, skipped thereafter)
+  testing.md         # General testing principles (loaded when tests are in scope)
+  review-orchestration.md  # Multi-agent style review framework (loaded by formatter skills)
+c/
+  CLAUDE.md          # C style rules
+  testing.md         # C testing rules (loaded via @ import from c/CLAUDE.md)
+  README.md          # Human-readable rendering
+elixir/
+  CLAUDE.md          # Elixir style rules
+  testing.md         # Elixir testing rules (loaded via @ import from elixir/CLAUDE.md)
+  README.md          # Human-readable rendering
+ruby/
+  CLAUDE.md          # Ruby style rules
+  style.rb           # Existing human-written style guide (referenced by CLAUDE.md)
+skills/
+  format-code/       # Autonomous formatter (fix mode)
+  format-review/     # Interactive reviewer (suggestion mode)
+  format-rewrite/    # Rewrite codebase to guide; skips codebase precedence (user-invoked only)
+  style-report/      # Difficulty-report generator (project-agent-facing)
+  update-styleguide/ # Pull latest style guide from remote
+```
 
 ---
 
@@ -445,9 +541,7 @@ if (!is_invalid(connection))
 
 ---
 
-## Philosophy
-
-### Boy Scout Rule
+## Boy Scout Rule
 
 Always leave code cleaner than you found it. Small, continuous improvements compound over time. If you touch a file to fix a bug or add a feature, leave the surrounding code in better shape than you found it — a better name, a removed dead function, a clearer comment. This is not a mandate to refactor everything you touch; it is an encouragement to make small improvements as you go.
 

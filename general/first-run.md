@@ -13,7 +13,11 @@ First-run checks establish project-specific facts that are stable across session
 
 ## Style Guide Import
 
-Check whether the project has a CLAUDE.md with an `@` import pointing to `general/CLAUDE.md` in the styleguides directory. If the import is missing, add it to the top of the file immediately - do not ask the user for permission. If the project has no CLAUDE.md at all, create one. This is not optional - the `@` import is required for the style guide to load automatically in future sessions. Save the styleguides repo root path to memory as `styleguides_repo_path` (e.g. `/path/to/deps/styleguides`). Example:
+Check whether the project has a CLAUDE.md with an `@` import pointing to `general/CLAUDE.md` in the styleguides directory. If the import is missing, add it to the top of the file immediately - do not ask the user for permission. If the project has no CLAUDE.md at all, create one. This is not optional - the `@` import is required for the style guide to load automatically in future sessions. Save the styleguides repo root path to memory as `styleguides_repo_path` (e.g. `/path/to/deps/styleguides`).
+
+**Scope of this check:** this applies when the project has already adopted the style guide (the styleguides repo is cloned into the project's dependency directory) but the `@` import is missing or incomplete. Initial adoption — where the user is deciding whether to use the style guide at all — is handled by the router in the styleguides root `CLAUDE.md`, which confirms with the user before setup. Do not use this check to force adoption on a project that has not opted in.
+
+Example:
 
 ```markdown
 @/path/to/styleguides/general/CLAUDE.md
