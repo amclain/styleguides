@@ -24,7 +24,7 @@ This rule applies to every agent role that interacts with the guide:
 - **Review agents** (including post-generation review and style review) load the guide before evaluating code. Every finding must reference a rule name from the loaded files; if an agent cannot cite a rule from the guide, it is not applying the guide.
 - **Training agents** load the guide before validating report findings or evaluating candidate rules against existing content.
 
-**Which files to read** depends on the task context - the entry point (project CLAUDE.md `@` import, `skills/format-code/SKILL.md`, `patterns/review_orchestration.md`, or `training.md`) lists the specific files required for that task. This section defines *how* to load, not *which* files.
+**Which files to read** depends on the task context - the entry point (project CLAUDE.md `@` import, `skills/format-code/SKILL.md`, `general/review-orchestration.md`, or `training.md`) lists the specific files required for that task. This section defines *how* to load, not *which* files.
 
 **Detection**: if an agent produces output that cites a rule not present in the loaded files, or uses terminology from a different language's guide, it did not read the guide and its output is unreliable. Retry the task after verifying the agent performs the required Read calls.
 
@@ -42,17 +42,32 @@ The generating agent cannot accurately review its own code due to context bias f
 
 When generating new code, apply the rules in this guide and the loaded language guide proactively. Do not wait to be asked.
 
+**Delegated generation.** If you (the project lead) delegate code generation to a subagent, the subagent does NOT inherit your loaded style guide. `@` imports apply only to the agent that loaded them - Claude Code does not propagate imported context to spawned subagents. When launching a generator subagent, include in its prompt the list of guide files it must Read in full before generating:
+
+- `general/CLAUDE.md`
+- The target language's `<lang>/CLAUDE.md`
+- `general/testing.md` if the subagent will write or modify test code
+- Any mechanics references for frameworks the generated code will use (e.g. Unity, ESpec, a DI library)
+
+Use absolute or repo-relative paths so the subagent can Read them directly. State the target language in the prompt so the loading rule is unambiguous. Failing to pass these instructions produces training-data-default code that the review step then has to rewrite - this is waste, not a caught-safely failure mode.
+
 **Multiple options:** when code complexity is high and more than one approach is appropriate, present the options with trade-offs rather than prescribing one answer. Limit to 2-3 choices - 1 or 2 is best.
 
 ### Post-Generation Review
 
-After completing a code generation task (not after every function - after the full task is done), launch a review subagent using the user's preferred review model. The generating agent has context bias from the generation phase and is less likely to catch its own style violations. A fresh review agent reads the generated code cold and catches patterns the generator consistently misses due to training data bias (e.g. zero-arity type parentheses, pipe operator parentheses).
+After completing a code generation task (not after every function - after the full task is done), run style review on the generated code. This catches patterns the generation step consistently misses due to training-data bias (e.g. zero-arity type parentheses, pipe operator parentheses) and enforces the guide contextually.
 
-The post-generation review subagent fixes violations autonomously - it reads the generated code, identifies style violations, and applies corrections directly without prompting the user. This is different from Style Review mode, where suggestions are presented for the user to accept or reject. Post-generation review is a cleanup pass on code the agent just wrote, not a review of the user's code. After completing all fixes, report a summary of what was changed (file, rule, what was fixed).
+**Who runs the review.** The project lead - the agent that owns the session - runs the review directly by invoking `skills/format-code`. It does not spawn a separate subagent to act as review lead. Claude Code's agent model forbids nested orchestration (subagents cannot launch subagents - see `general/agents.md`), and the reviewer subagents at Tasks 1.1 through 1.6 must be launched by the lead. See the "Integrating this framework from a larger orchestration" section at the top of `general/review-orchestration.md` for the full architecture and rationale.
 
-After applying fixes, the review subagent must run the project's test suite to verify the fixes did not break anything. Style corrections are formatting-only and must not change behavior. If tests fail after fixes, diagnose and correct the issue.
+**Bias check.** The generator-bias principle (`general/agents.md` - Warm vs Cold Agents - Bias Risk) targets agents that wrote the code being reviewed. If the project lead delegated code generation to a subagent, the project lead has no generator bias - it did not author the code - and is the correct agent to run review. The cold-review property lives at the reviewer-subagent layer (Tasks 1.1 through 1.6), which the framework runs cold by design: each reviewer starts fresh, loads only its required reading, and has no project context.
 
-If the user's preferred review model is different from the generation model (e.g. generate with Sonnet, review with Opus), this step is especially valuable - the review model may catch violations the generation model cannot self-correct on. Skip this step if the user has opted out of post-generation review.
+If the project lead itself wrote the code (no generation subagent was used), the generator-bias concern applies to the *generation* step, not to the review step: running fresh reviewer subagents for Tasks 1.1 through 1.6 still provides the cold-review property for each finding. The project lead's role is to orchestrate the review and apply fixes, not to generate findings.
+
+**What the review does.** The project lead applies fixes directly - this is fix mode, not suggestion mode. Post-generation review is a cleanup pass on code the agent just produced, not a review of the user's code. After applying fixes, the project lead runs the project's test suite to verify the fixes did not break anything. Style corrections are formatting-only and must not change behavior. If tests fail after fixes, diagnose and correct.
+
+Report a summary of what was changed (file, rule, what was fixed).
+
+**Model preference.** The user's preferred review model is saved in memory from the first-run check. If it differs from the generation model (e.g. generate with Sonnet, apply review with Opus), the difference matters for the reviewer subagents that do require judgment (Task 1.5 is Opus-only regardless of user preference; other tasks use Haiku or Sonnet per the framework). Skip post-generation review entirely if the user has opted out.
 
 ### Style Review
 
@@ -71,6 +86,8 @@ If the user asks what capabilities are available, describe all options:
 **Output format:** a terse numbered list of suggestions. Reasoning is available if asked ("explain #N").
 
 **Applying suggestions:** if the user asks you to apply a suggestion or act as a formatter, make the change directly. The default is to suggest; applying is opt-in.
+
+**Git operations are read-only.** Formatter skills (style review, post-generation review, `/format-code`, `/format-review`, `/format-rewrite`) may read git state (`git status`, `git diff`, `git log`, `git check-ignore`) to determine review scope, but never write git state. Do not `git add`, `git commit`, `git stash`, `git restore`, `git checkout <file>`, or any other operation that mutates the repo or working tree. After applying fixes to files, report what changed and stop - the user reviews with `git diff` and commits on their own. This constraint applies to every formatter skill.
 
 ---
 
@@ -100,6 +117,30 @@ Names should be precise, not long. Adding more words to a name does not make it 
 A name is read in context. Information already visible in the surrounding code — adjacent expressions, patterns, type annotations — does not need to be repeated in the name. Encoding what the reader can already see is noise, not precision.
 
 CAUTION (detokenize): Abbreviations and grammar problems are invisible when reading identifiers as code tokens. To evaluate naming quality, split the identifier into words and read them as an English phrase. The split method depends on the convention: replace underscores with spaces for `snake_case`, insert spaces at case boundaries for `PascalCase` and `camelCase`, replace hyphens with spaces for `kebab-case`. Examples: `src_port` → "src port" → abbreviated. `source_port` → "source port" → full words. `SrcPort` → "Src Port" → abbreviated. `SourcePort` → "Source Port" → full words. `sensor_reading_range` → "sensor reading range" → bare noun phrase, no verb. `allows_exact_match` → "allows exact match" → complete proposition.
+
+### Domain Terms vs. Arbitrary Abbreviations
+
+Language guides list accepted short forms and prohibited abbreviations, but the lists are not exhaustive. When a project-owned identifier uses a short form not on the accepted list, classify it using the external-API test:
+
+> Does the framework, OS, library, or protocol the code integrates with use this short form in its own public API (function signatures, type names, specification text)?
+
+If yes, the short form is a **domain term** - using the full word in project code would diverge from the external API's vocabulary and create a naming mismatch at every integration boundary. Keep the short form. If no - the external API spells out the full word and the short form exists only in consuming project code - it is an **arbitrary abbreviation** and the full word should be used.
+
+```
+# good - the external API uses the short form in its own types and functions
+# (e.g. an external_handle_t type, external_handle_reserve function), so
+# project code matches the API's vocabulary
+external_handle_t queue_request_handle
+
+# avoid - the external API spells out the term
+# (e.g. external_notification_alloc, external_notification_t), so project
+# code should too - the short form "notif" appears nowhere in the external API
+external_handle_t queue_notif_handle
+```
+
+The test applies only to identifiers the project authors. It does not apply to references to external symbols themselves - an external function keeps whatever name its author gave it, full word or abbreviated, and is not subject to style review (see `general/review-orchestration.md` Task 1.3 scope rule).
+
+This rule is the principle behind every language guide's accepted-short-form list. The language guide pre-classifies the common cases (e.g. `ptr`, `fd`, `cb` in C; others per language); this rule handles everything the language guide did not pre-classify.
 
 ### Opposing Pairs
 
@@ -505,275 +546,7 @@ This principle also applies to comments — if one inline comment in a group wou
 
 ## Testing
 
-### Tests Are Specifications
-
-A test suite is a specification of behavior. Reading the tests should teach you what the code does and why — the domain rules, the edge cases, the invariants. Write tests as if they are the authoritative description of the system's behavior.
-
-Test names should be behavioral propositions in plain language. A name like `"returns an error when the network is unreachable"` tells a developer exactly what behavior is expected, why it matters, and whether a refactor has preserved the intended functionality. A name that mirrors the code structure — like `"connect/1"` — describes the shape of the code, not the behavior of the system.
-
-Test names describe either what the subject can do (a capability: `"can turn on the output port"`, `"returns :ok on success"`) or what is true about the subject (a property: `"name can start with a single underscore"`, `"connection defaults to port 6379"`). Both are behavioral propositions - they say something meaningful about the system. Prefer requirement-style language (`can`, `returns`, `has`, `is`, `does not`) that frames the test as a specification rather than a narration of test steps.
-
-Write descriptions at the caller's level of abstraction. The observable contract is what a caller experiences: the value returned, the side effect produced, the state that changes. Implementation details — internal data structures, storage mechanisms, algorithms, module names that callers don't interact with directly — do not belong in test descriptions, even when the description is grammatically a behavioral proposition.
-
-```elixir
-# good — describes the observable contract
-test "reports the current lux reading"
-test "can turn on the output when lux is below the threshold"
-
-# avoid — names an internal storage mechanism the caller doesn't interact with
-test "publishes the lux reading to the property table"
-
-# avoid — describes the algorithm, not the observable result
-test "combines the high and low register words into a 32-bit lux value"
-```
-
-```elixir
-# good — describes a specific behavior
-test "returns an error when the network is unreachable"
-test "returns :ok when the response is successful"
-
-# good — describes a property or constraint
-test "name can start with a single underscore"
-test "connection defaults to port 6379"
-
-# avoid — mirrors code structure, describes nothing
-test "connect/1"
-test "test_connect"
-```
-
-**Casing.** Test descriptions and grouping labels are written in lowercase. The exceptions are abbreviations and initialisms that are conventionally uppercase (HTTP, JSON, TCP, I2C) and proper nouns, which are rare in test descriptions. A description is prose inside a string literal, not a sentence at the top of a paragraph - there is no reason to capitalize the first word, and doing so creates visual noise when test frameworks concatenate nested block descriptions into output.
-
-**Grouping blocks** - many test frameworks provide one or more grouping keywords (e.g. `describe`, `context` in ESpec and RSpec; `describe` in ExUnit and Jest). Grouping blocks organize tests by semantic role: a scope the tests apply under, or a behavior or scenario being tested. Language-specific guides define which grouping keywords exist in each framework and how to choose between them when more than one is available.
-
-In C test frameworks, the test name is a function identifier rather than a string. The same behavioral proposition principle applies - the function name should describe the expected behavior, not mirror the function under test. C frameworks do not provide grouping blocks; the file and fixture names carry the scope that grouping blocks would carry in other languages.
-
-```c
-// good - behavioral propositions (module name is in the file name, not repeated)
-// in test_sensor.c:
-void test_returns_negative_on_hardware_failure(void) { ... }
-void test_returns_calibrated_value(void) { ... }
-
-// in test_config_store.c:
-void test_overwrites_existing_key(void) { ... }
-
-// avoid - mirrors the function under test, describes nothing
-void test_read(void) { ... }
-void test_set(void) { ... }
-
-// In Google Test, the same principle applies:
-// TEST(Sensor, ReturnsNegativeOnHardwareFailure) { ... }
-// TEST(Sensor, ReturnsCalibratedValue) { ... }
-```
-
----
-
-### Test at the Right Level
-
-Unit tests verify that individual modules behave correctly in isolation. Feature tests verify that modules work together to produce the correct end-to-end behavior. Both are necessary - a system where every unit test passes can still fail if the units are wired together incorrectly.
-
-Unit tests mock or stub external dependencies to isolate the subject. Feature tests wire real modules together and only mock at the system boundary - the external interfaces that the feature cannot control (hardware, network, OS services).
-
-Structure the test suite so that both levels are present:
-- **Unit tests** cover module-level logic, edge cases, and error paths
-- **Feature tests** cover scenarios that cross module boundaries - a request flowing through parsing, validation, and response, for example
-
-Feature tests tend to require more setup. Extract shared setup into helper functions when the same scenario scaffolding is used across multiple tests. Name helpers after the scenario they create, not the implementation steps they perform.
-
-**When to deviate**: Small programs with few modules may not need a separate feature test layer - the unit tests may already exercise the integration points. Add feature tests when the system has enough modules that the wiring between them is a meaningful source of bugs.
-
----
-
-### One Logical Concept Per Test
-
-Each test should verify one logical concept. This is not the same as one assertion — a single concept may require several assertions to fully verify. Tests that bundle multiple unrelated concepts together make failures harder to diagnose and make the test name impossible to write meaningfully.
-
-```elixir
-# good — one concept, multiple assertions that together verify it
-test "a successfully parsed response contains the expected fields" do
-  assert response.status == :ok
-  assert response.body == expected_body
-  assert response.headers["content-type"] == "application/json"
-end
-
-# avoid — two unrelated concepts in one test
-test "connection" do
-  assert {:ok, conn} = connect(opts)
-  assert :ok = disconnect(conn)
-end
-```
-
----
-
-### Test Grouping Structure
-
-Group tests under a named block when multiple tests share an overarching theme, common setup or teardown, or shared example behavior. Three signals that a grouping block adds value:
-
-- Multiple tests share an overarching theme or concept
-- Multiple tests share setup or teardown — the block scopes it to exactly the tests that need it, rather than running it for every test in the file
-- Multiple tests share behavior via shared examples
-
-When test descriptions are nested inside grouping blocks, they typically concatenate in output. Write descriptions so they chain into readable sentences.
-
-Name groups after behavior and scenarios, not function signatures. A name like `"connect/2"` describes code structure; `"when the host is unreachable"` describes behavior.
-
-```elixir
-# good — group scopes setup to the tests that need it; names describe scenarios
-describe "when the session is active" do
-  setup do
-    {:ok, conn: connect(host: "localhost")}
-  end
-
-  test "can send a command", %{conn: conn} do
-    assert :ok = send_command(conn, :ping)
-  end
-
-  test "can receive a response", %{conn: conn} do
-    assert {:ok, _} = receive_response(conn)
-  end
-end
-
-# avoid — group named after function signature
-describe "connect/2" do
-  test "returns :ok" do
-    assert :ok = connect(host: "localhost")
-  end
-end
-
-# good — same concept; name describes behavior
-describe "when the host is reachable" do
-  test "returns :ok" do
-    assert :ok = connect(host: "localhost")
-  end
-end
-```
-
-A flat list of test cases with no grouping is acceptable when no meaningful structure exists.
-
-Language-specific guides define the exact block names and syntax for each framework (e.g. `describe`/`context` in ESpec and RSpec, `describe` in ExUnit and Jest).
-
----
-
-### Tests Are Independent and Deterministic
-
-**Intent**: Tests that share state or depend on execution order are fragile — a failure in one hides or causes failures in others, and the suite becomes unreliable.
-
-**Convention**: Each test sets up its own state and cleans up after itself. Tests must not rely on order of execution or side effects from previous tests. A test that produces different results on a second run, or in a different environment, is broken.
-
-**Example**:
-```elixir
-# good — each test sets up its own state
-test "returns an error when the connection is refused" do
-  conn = connect(bad_opts)
-  assert {:error, :refused} = send_request(conn)
-end
-
-# avoid — relies on state set by a previous test
-test "returns an error after disconnect" do
-  # assumes conn was established by a prior test
-  assert {:error, :closed} = send_request(@conn)
-end
-```
-
-**When to deviate**: Shared setup is acceptable when the fixture is read-only and identical for all tests — a static reference dataset, for example. Avoid shared mutable state.
-
----
-
-### Tests Should Support a Tight Feedback Loop
-
-**Intent**: Tests that engineers don't run provide no safety net. The goal is a suite that gets run continuously — while iterating on code, not just at the end.
-
-**Convention**: A test suite should be fast enough that running it feels like a natural part of the development rhythm, not an interruption. When the full suite becomes too slow to run after every change, lean on tooling to narrow scope: run only the file or describe block relevant to the current work.
-
-All tests must pass before merging. Run the full suite before submitting code for review.
-
-Avoid coupling tests to slow external systems (real network calls, real databases, real timers) unless the test is explicitly an integration test. Slow dependencies in unit tests accumulate and eventually push the suite into "too slow to bother" territory.
-
-**When to deviate**: Integration and end-to-end tests touch real systems by definition and belong in a separate suite with different run expectations.
-
----
-
-### Coverage Metrics Are a Signal, Not a Target
-
-**Intent**: Coverage numbers measure which lines were executed, not whether the tests are meaningful. Optimizing for coverage produces tests that execute code without verifying behavior.
-
-**Convention**: Use coverage as a diagnostic tool — a low number signals undertested areas worth examining. Do not set coverage thresholds as pass/fail gates. Every test written should be meaningful and add understanding about the application's functionality. A test written to increase a coverage number rather than to specify behavior is noise — it bloats the suite without improving confidence.
-
-**When to deviate**: Some organizations require coverage thresholds for compliance or audit purposes. In those cases, treat the threshold as a floor, not a goal.
-
----
-
-### Tests Should Not Duplicate Implementation Logic
-
-**Intent**: A test that reimplements the logic it is testing provides no independent verification — it can only confirm that two copies of the same code agree with each other.
-
-**Convention**: Test outputs against known, fixed values. If deriving the expected value requires reproducing the algorithm, the test is not a specification — it is a mirror. Use concrete examples that illustrate the behavior, not generated inputs run through a parallel implementation.
-
-**Example**:
-```elixir
-# good — expected value is a known, fixed result
-test "calculates the discounted price" do
-  assert apply_discount(100, 0.2) == 80
-end
-
-# avoid — expected value is derived by reimplementing the logic
-test "calculates the discounted price" do
-  expected = price - (price * discount)
-  assert apply_discount(price, discount) == expected
-end
-```
-
-**When to deviate**: Property-based tests deliberately generate inputs and assert properties that must hold — rather than specific output values. This is a valid complement to example-based tests, not a violation of this rule.
-
----
-
-### Write Tests With the Code
-
-When implementing a new module or function, write tests alongside the
-implementation — not as a separate follow-up task. If test scaffolding already
-exists (empty spec or test files for the module), fill it in as part of the
-same implementation.
-
-Unimplemented test files are not acceptable deliverables. An empty test file
-provides no specification and no safety net. Every module with public functions must have tests. Before completing a code generation task, verify that every test file has at least one test.
-
----
-
-### Test Code Is Production Code
-
-**Intent**: Tests that are hard to read become tests that nobody trusts, updates, or learns from. Letting test code quality slip undermines the value of the suite.
-
-**Convention**: Apply the same standards to test code as to production code — clear naming, small focused functions, no duplication of test setup logic, no magic numbers. A developer reading a failing test should be able to understand what it was asserting and why, without digging into the implementation.
-
-**When to deviate**: Test helpers and fixtures can be more permissive about abstraction — a shared factory or builder that exists solely to reduce setup noise is acceptable even if it would be over-engineered in production code.
-
----
-
-### Assertion Precision
-
-Match the specificity of an assertion to the claim being made. If you mean exact equality, assert exact equality. If you mean structural membership (e.g. "this is a success tuple"), use a structural assertion. Use truthiness or falsiness assertions only when truthiness is what you are actually testing.
-
-A loose assertion can mask regressions: an assertion that only checks truthiness passes even if the value changes, as long as it remains truthy.
-
-```elixir
-# good — exact equality when the exact value is what's claimed
-assert result == :ok
-assert response.status == 200
-
-# avoid — truthiness check when exact equality is intended
-# passes for any truthy value, not just :ok
-assert result
-
-# good — truthiness only when truthiness is the actual property being tested
-assert auth_token  # testing that a token was generated, any non-nil value is fine
-
-# good — structural assertion for structural claims
-assert {:ok, _conn} = connect(opts)  # testing the shape, not the specific conn value
-
-# avoid — exact equality for a structural claim
-assert {:ok, conn} = connect(opts)  # fails if conn fields differ from expected
-```
-
-Language-specific guides describe the assertion style for each framework (e.g. `eq`/`be_truthy` in ESpec, `==`/`match?` in ExUnit).
+General testing principles are in `general/testing.md`. Load that file when writing or reviewing test code in any language. Language-specific testing rules (framework syntax, assertion styles, mock libraries) are in `<lang>/testing.md`.
 
 ---
 

@@ -50,7 +50,7 @@ app_app_connection_open(&conn, &config);
 
 Good C names will be longer than equivalent names in languages with modules or namespaces. This is expected - the global namespace requires each name to carry its full context.
 
-Do not abbreviate `buffer` to `buf`, `length` to `len`, `message` to `msg`, `source` to `src`, `destination` to `dst`, or `checksum` to `cksum`. Write the full word. Use `size` as a concise alternative to `length` where appropriate (e.g. `buffer_size` instead of `buffer_length`). Accepted short forms: `ptr` (pointer), `fd` (file descriptor), `cb` (callback) - these are domain terms, not abbreviations.
+Do not abbreviate `buffer` to `buf`, `length` to `len`, `message` to `msg`, `source` to `src`, `destination` to `dst`, or `checksum` to `cksum`. Write the full word. Use `size` as a concise alternative to `length` where appropriate (e.g. `buffer_size` instead of `buffer_length`). Accepted short forms: `ptr` (pointer), `fd` (file descriptor), `cb` (callback) - these are domain terms, not abbreviations. The closed list above is not exhaustive - apply the Domain Terms vs. Arbitrary Abbreviations rule from `general/CLAUDE.md` for short forms not listed here.
 
 Standard acronyms from formal specifications (RFCs, IEEE standards) are acceptable in constant names when the acronym is the term used in the specification. Examples: `IHL` (Internet Header Length, RFC 791), `DSCP` (Differentiated Services Code Point, RFC 2474), `ECN` (Explicit Congestion Notification, RFC 3168), `TTL` (Time To Live). Spelling these out (`INTERNET_HEADER_LENGTH`) would make the identifiers harder to cross-reference with the source documentation. When RFC acronyms are used, add a comment referencing the relevant RFCs - either above the `#define` group or as a top-level file comment if the RFCs apply to the entire file. This follows the general guide's Documentation Notation rule: write it in the notation the documentation uses.
 
@@ -722,6 +722,52 @@ if (address.type == ADDRESS_IPV4 &&
 int total = base_value
   + offset
   + adjustment;
+```
+
+**Multi-line function calls inside `if` conditions.** When a function call inside an `if` condition has too many arguments to fit on one line, break the call across lines:
+
+- One argument per line at body indent (one level from the `if`).
+- The call's closing `)` and the `if` condition's closing `)` both on their own line together: `))` at body indent.
+- The `if` body follows on the next line, per the usual single-statement-body convention.
+
+Do not align continuation lines to the opening paren - this produces deep indentation that is fragile under renames and drifts across the column budget. Do not tuck the closing parens onto the last argument's line - visual separation of the closing parens from the final argument matters when the reader is scanning for where the condition ends.
+
+```c
+// good - one arg per line at body indent; both closing parens on their own line
+if (filter_matches(
+  filter,
+  &request.source,
+  request.destination,
+  request.kind,
+  clock_get_timestamp()
+))
+  return;
+
+// avoid - args aligned to the opening paren (deep indentation, fragile)
+if (filter_matches(
+      filter, &request.source,
+      request.destination, request.kind,
+      clock_get_timestamp()))
+  return;
+
+// avoid - closing parens tucked onto the last argument's line
+if (filter_matches(
+  filter,
+  &request.source,
+  request.destination,
+  request.kind,
+  clock_get_timestamp()))
+  return;
+
+// avoid - call's `)` stays inline but condition's `)` drops to its own line
+if (filter_matches(
+  filter,
+  &request.source,
+  request.destination,
+  request.kind,
+  clock_get_timestamp())
+)
+  return;
 ```
 
 **When to deviate**: Follow the existing style of a codebase.
@@ -2529,6 +2575,59 @@ for (int i = 0; fields[i].name != NULL; i++)
 ```
 
 **When to deviate**: When the array size is known at compile time and a count is more natural (e.g. fixed-size buffers).
+
+---
+
+### Application Assertions
+
+**Intent**: Assertions in application code (init-time contract checks, framework assertion macros like `assert`, Zephyr `__ASSERT`, or vendor-provided assertion macros) behave like tests - they verify a contract and abort on failure. The formatting rules that make test assertions readable apply equally when assertions appear outside test files.
+
+**Convention**: Follow the test-assertion formatting rules from `c/testing.md`:
+
+- Separate declarations from assertions. Declare variables first; assert after.
+- Assertions stand as their own visual block. Group related assertions; separate groups with a blank line.
+- Do not inline a variable declaration inside an assertion call.
+- Multi-line assertions use the same split formatting as test assertions: the function call goes inside, the assertion label stays outside.
+
+**Example**:
+
+```c
+// good - declarations separated from assertions
+some_handle_t client = some_reserve();
+client_record_t record = {0};
+
+ASSERT_CREATED(
+  client_create(client, token, &record),
+  "client"
+);
+
+// good - related declarations grouped, assertions grouped
+some_token_t public_free, public_token;
+some_token_t private_free, private_token;
+
+ASSERT_OK(
+  token_slot_pool_alloc(&public_free),
+  "public free"
+);
+
+ASSERT_OK(
+  token_slot_pool_alloc(&public_token),
+  "public token"
+);
+
+// good - short assertion on one line when the variable is declared immediately above
+some_handle_t queue = queue_create();
+ASSERT_OK(queue_start(queue), "queue start");
+
+// avoid - declaration buried inside assertion
+ASSERT_OK(
+  token_slot_pool_alloc(&token), "alloc"
+);
+```
+
+**When to deviate**: The "inline when it fits" exception from the test guide applies - a short assertion whose variable is declared on the line immediately above may stay on one line.
+
+**Cross-reference**: see `c/testing.md` "Test Variable Placement" and "Inline Assertions" for the canonical forms. This section extends those rules to non-test code.
 
 ---
 

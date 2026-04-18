@@ -6,6 +6,27 @@ A lead agent reads this document, identifies the target language, and produces a
 
 This framework applies to both review mode (suggestions presented to the user) and fix mode (autonomous corrections). See `skills/format-code/SKILL.md` and `skills/format-review/SKILL.md` for the user-facing entry points.
 
+## Integrating this framework from a larger orchestration
+
+When a larger workflow (project dev plan, CI pipeline, code-generation skill, release process) needs to include style review as a step, the lead agent of that larger workflow **assumes the review-lead role directly** when it reaches the review step. It does not spawn a separate agent to act as review lead. This is not a preference - Claude Code's agent model forbids the alternative: subagents cannot launch their own subagents (see `general/agents.md` - Roles - Lead), and the reviewer subagents at Tasks 1.1 through 1.6 must be launched by the agent that *is* the lead. A "cold review lead" as a subagent cannot orchestrate the subagents it would need.
+
+This is safe because the cold-review principle (`general/agents.md` - Warm vs Cold Agents - Bias Risk) targets generator bias: an agent that wrote the code should not review it. A project lead that delegated code generation to a subagent has no generator bias - it did not author the code. The bias check lives at the reviewer-subagent layer (Tasks 1.1 through 1.6), which the framework already runs cold by design: each reviewer subagent starts fresh, loads only its required reading, and has no project context.
+
+**Agent-callable entry point:** `skills/format-code` - autonomous fix mode. The project lead loads the skill, reads this framework, instantiates it for the current scope, launches the read-only reviewer subagents, collects findings, and applies fixes. The skill is instructions the project lead follows itself - not a handoff to a separate agent.
+
+**User-only entry points** (agents must NOT invoke these from a larger orchestration):
+- `format-review` - interactive suggestion mode; requires a human in the loop for accept or reject decisions.
+- `format-rewrite` - rewrites the codebase to match the guide, disregarding codebase precedence. High blast radius; the `--rewrite` modifier is reserved for deliberate user invocation on fresh scaffolds.
+
+**Do NOT, from inside a larger orchestration:**
+- Decompose style review into Tasks 1.1 through 1.6 in the larger plan's own documents (this framework is the source of truth).
+- Pick models for style-review subtasks (the framework assigns them).
+- Copy mechanical check commands or task templates into the larger plan.
+- Restate the task breakdown in project CLAUDE.md.
+- Spawn a subagent and ask it to "lead" the review - the architecture does not support nested orchestration, and the subagent cannot launch the reviewers it would need.
+
+Project-specific overlays (fix-applicator rules, codebase-precedence exceptions, external-API vocabulary the project integrates with) live in project CLAUDE.md and are read by the framework when invoked. They do not belong in the larger orchestration's own documents.
+
 ## Contents
 
 1. Framework (language-agnostic) - task types, dependency graph, orchestration, error handling, quality signals
@@ -35,6 +56,7 @@ Both the lead agent and every task agent it launches must perform the required r
 |---|---|
 | Always | `general/CLAUDE.md` (which `@` imports `general/collaboration.md`), this framework document |
 | Reviewing `<lang>` code | `<lang>/CLAUDE.md` |
+| Reviewing test files (any language) | `general/testing.md` |
 | Reviewing test files for `<lang>` | `<lang>/testing.md` (typically `@` imported from the language CLAUDE.md; load explicitly if not) |
 | Reviewing code that uses a framework with a mechanics reference (e.g. Unity, ESpec, a DI library) | The mechanics reference file for that framework |
 
@@ -256,6 +278,8 @@ Required reading (read in full before any other work, one Read call per file, no
 
 For each file in {SCOPE}, examine all non-trivial identifiers. Read the full source file for context (understand what surrounding types and scopes provide), but only report findings on identifiers defined or modified within the changed line ranges. In `--all` scope, examine all identifiers in the file.
 
+Scope is DEFINITIONS, not references. Review names the project authors: variable declarations, function definitions, type definitions, constant definitions. Do NOT flag identifiers that are merely referenced from external libraries, frameworks, or the standard library - those names are authored outside the project and are not subject to style review. A call to an external function keeps its original name; only flag the project-owned identifier that wraps or uses it.
+
 Technique - detokenize each identifier:
 1. If the language uses namespace prefixes, strip the prefix first
 2. Split according to the language's convention (snake_case, camelCase, PascalCase, kebab-case)
@@ -289,7 +313,7 @@ Output format:
 
 **Test name grammar is part of this pass.** Evaluating test name grammar is a multi-concern task (recognizing propositions, distinguishing verb-leading from noun-leading names, applying implicit subject from file name). When reviewing test files specifically, run the Identifier Scan for test names with **Opus** instead of Haiku. Opus has the judgment to accept valid constructions that Haiku over-flags. This reassignment is an exception to the default Haiku assignment for this pass and applies only to test files.
 
-**Common false positives**: names matching external API conventions the codebase integrates with, short field names that are precise within their struct context, local variables in narrow scopes, test names with implicit subjects from the file name.
+**Common false positives**: flagging external function calls or type references (scope is project-authored definitions only - external references are never in scope), names that incorporate external-API vocabulary where the external API itself uses that term (see the Domain Term rule in the language guide), short field names that are precise within their struct context, local variables in narrow scopes, test names with implicit subjects from the file name.
 
 ---
 
@@ -356,6 +380,10 @@ You are reviewing {LANGUAGE} code for style violations. After the required readi
 
 Read the full source file for context (rules may depend on surrounding code). Report findings on lines within the changed line ranges. Do not flag pre-existing style violations in unchanged code - that code is the responsibility of whoever originally wrote it, and reformatting it creates diff noise. In `--all` scope, review the entire file.
 
+**Codebase precedence (check before flagging).** Before flagging any finding, verify that the codebase's established convention is consistent with the guide. Where the codebase consistently deviates from a guide rule (observed across multiple files or functions, not a one-off), treat the deviation as codebase precedence and do not flag it. This is the "Precedence in the codebase takes priority" meta-rule from `general/CLAUDE.md` applied at review time. This check runs BEFORE rule application, not as a trailing filter on findings.
+
+**Exception - `--rewrite` / `--styleguide-precedence` modifier:** when the review was invoked with `--rewrite` (or its alias `--styleguide-precedence`), skip the codebase-precedence check and apply the guide as written. Typical use: a freshly scaffolded project whose existing patterns should be rewritten to match the guide, not learned from.
+
 **Group cohesion exception:** when a changed line is part of a group of related code (multiple clauses of the same function, branches of the same case/switch, fields of the same struct, steps of the same pipeline, a sequence of similarly-structured setup calls), evaluate the group as a whole. If the change creates an inconsistency within the group, either reformat the change to match the group's existing style or reformat the group to match the change - whichever produces more natural code. This may require touching unchanged lines within the group. Apply this exception conservatively: only for lines that are clearly part of the same group as the change, and only when the inconsistency meaningfully degrades readability. See the Review Scope section for details and examples.
 
 Apply all rules from the language guide and the general guide. For each finding, provide:
@@ -380,7 +408,7 @@ Output format:
 ]
 ```
 
-**Common false positives**: cases covered by the codebase's established conventions (precedence in the codebase rule), rules that do not apply to the specific context, intentional deviations marked by style overrides.
+**Common false positives**: cases covered by the codebase's established conventions (precedence in the codebase rule - check BEFORE flagging, not after), rules that do not apply to the specific context, intentional deviations marked by style overrides. Flagging a pattern the codebase consistently uses (e.g. `if (cond) { single_statement; }` when the codebase always braces single-statement bodies) is a failure to apply codebase precedence - not a true finding.
 
 ---
 
@@ -583,9 +611,18 @@ For each task in the manifest:
 4. Replace `{REQUIRED_READING}` with the list of files the task agent must read in full before starting, determined by scope:
    - Always: `general/CLAUDE.md`, this framework document
    - The language guide: `<lang>/CLAUDE.md`
-   - If any file in scope is a test file: `<lang>/testing.md`
+   - If any file in scope is a test file: `general/testing.md` AND `<lang>/testing.md`
    - If any file in scope uses a framework with a mechanics reference (e.g. Unity, ESpec, a DI library): the mechanics reference file
    List files with absolute or repo-relative paths so the task agent can Read them directly.
+
+   **Excluded by default (do not include in `{REQUIRED_READING}`):**
+   - Other language guides (`<other-lang>/CLAUDE.md`, `<other-lang>/testing.md`) - rules from unrelated languages pollute context and produce findings that cite the wrong guide.
+   - `training.md` - training process documentation, not style rules.
+   - `general/agents.md` - agent-model guidance, not style rules. Include only if the task involves model selection.
+   - `general/first-run.md` - one-time setup checks, not relevant to review.
+   - The styleguides repo root `CLAUDE.md` - repo meta-documentation, not style rules.
+
+   The include list above is exhaustive for normal review tasks. Broadening it ("read the style guide in full") is a common failure mode - reviewers load irrelevant material and spend context on it.
 5. Replace other placeholders (`{CHECKS_FOR_PHASE}`, `{PROHIBITED_ABBREVIATIONS}`, `{ORDERING_RULES}`, etc.) with the actual content from the language's instantiation section in Part 2
 6. For the Mechanical Check Review task, leave `{MECHANICAL_CHECK_RESULTS}` as a placeholder - it will be filled with the output of the Mechanical Checks task at runtime
 7. If project context includes overrides, append a "Project-specific overrides" section to each instruction that notes which default rules are suppressed
@@ -732,6 +769,11 @@ grep -Pn 'memset\(.*0.*sizeof' <file>
 
 # [pre-edit] Operator at end of line (should be at start of continuation)
 grep -Pn '[+\-*/|&] *$' <file>
+
+# [pre-edit] Lone closing paren on its own indented line (candidate "split parens"
+# violation in multi-line `if` calls - the call's `)` should not drop alone to
+# a new line when the `if`'s `)` is also on its own line; both should be together)
+grep -Pn '^\s+\)\s*$' <file>
 ```
 
 **Classification rules for Task 1.6 (Mechanical Check Review):**
@@ -748,6 +790,7 @@ grep -Pn '[+\-*/|&] *$' <file>
 - **Prohibited abbreviations**: True violation in identifier names. False positive if the match is inside a string literal, comment, or part of a longer word (e.g. "buford" matching "buf").
 - **memset at declaration**: True violation if the variable could use `= { 0 }` instead. False positive if zeroing through a pointer.
 - **Operator at end of line**: True violation for arithmetic/logical operators. False positive for pointer dereference (`*`), address-of (`&`), or operators inside string literals.
+- **Lone closing paren on its own indented line**: True violation when inside a multi-line `if` (or similar control-flow) condition - the rule is that both closing parens go together (`))` on one line). False positive for multi-line function signatures, multi-line function calls NOT inside a control-flow condition (the `)` on its own line is valid there - see the Line Breaks in Long Expressions rule), and multi-line function definitions where `)` precedes `{` on the next line. Inspect the enclosing construct before classifying.
 
 ### 2.1.2 File Ordering Templates (Task 1.2)
 

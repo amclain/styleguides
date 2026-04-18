@@ -40,7 +40,12 @@ For ongoing use with Claude Code, offer to set up `@` imports in the user's proj
 
 This system replaces mechanical formatters and linters. Mechanical tools apply rigid rules blindly — they often degrade readability by following prescribed patterns without understanding intent. This system reviews code the way a skilled human reviewer would: applying rules contextually, offering soft suggestions, and deferring to the author's judgment.
 
-Running `mix format` (or the equivalent for your language) invokes the AI reviewer. The output is a list of suggestions, not automatic rewrites. If you want the agent to apply a change, ask it to.
+Running `mix format` (or the equivalent for your language) invokes the AI reviewer. Two modes are available:
+
+- **Review mode** (`format-review` skill): a list of suggestions for the user to accept or reject. Nothing is changed until the user asks.
+- **Fix mode** (`format-code` skill): violations are corrected autonomously. This is also the default for post-generation review after an agent writes code, because cleaning up an agent's own output does not require per-change user approval.
+
+The user controls which mode applies. `format-review` is the interactive default when the user runs a style review themselves; `format-code` is what post-generation review invokes automatically. See `general/CLAUDE.md` Operating Modes for the full behavior of each.
 
 **Precedence in the codebase takes priority over this guide.** When in doubt, follow the style of the existing code. The more consistent a codebase is, the easier it is to read.
 
@@ -117,6 +122,7 @@ Style review is triggered by the language formatter plugin (e.g. `mix format`) w
 |---|---|
 | `style review <lang>` | Review changed code only (default) |
 | `style review <lang> --all` | Review entire codebase |
+| `style review <lang> --rewrite` | Apply the style guide as written; do not defer to codebase precedence. Typical use: a freshly scaffolded project whose existing patterns should be rewritten, not learned from. `--styleguide-precedence` is an accepted alias. |
 
 **Default review behavior (`style review <lang>`):**
 
@@ -135,6 +141,8 @@ general/
   collaboration.md   # Working with users under uncertainty (loaded via @ import)
   agents.md          # Agent capabilities, roles, scoping, and fatigue (loaded on demand)
   first-run.md       # First-run project checks (loaded once, skipped thereafter)
+  testing.md         # General testing principles (loaded when tests are in scope)
+  review-orchestration.md  # Multi-agent style review framework (loaded by formatter skills)
 c/
   CLAUDE.md          # C style rules (source of truth, AI-friendly)
   testing.md         # C testing rules (loaded via @ import from c/CLAUDE.md)
@@ -151,8 +159,15 @@ skills/
     SKILL.md         # Autonomous formatter (fix mode)
   format-review/
     SKILL.md         # Interactive reviewer (suggestion mode)
+  format-rewrite/
+    SKILL.md         # Rewrite codebase to guide; skips codebase precedence (user-invoked only)
+  style-report/
+    SKILL.md         # Difficulty-report generator (project-agent-facing)
   update-styleguide/
     SKILL.md         # Pull latest style guide from remote
+patterns/             # Working-artifact directory for pattern files during rule development
+                     # and validation scenarios. Contents are transient; cleaned up after use.
+training.md          # Training agent operating manual (not loaded by project agents)
 ```
 
 ## Using This Style Guide in Your Project
