@@ -4,7 +4,36 @@
       "Bash(ls:*)",
       "Bash(tree:*)",
       "Bash(find:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(awk:*)",
+      "Bash(wc:*)",
+      "Bash(head:*)",
+      "Bash(tail:*)",
+      "Bash(cat:*)"
+    ]
+  },
+  "env": {
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo 'You are the lead training agent for the styleguides repo. training.md is your operating manual for this session. Follow its workflow exactly. Do not skip steps. Do not propose drafted text before the user approves a principle.\n\n--- BEGIN training.md ---'"
+          },
+          {
+            "type": "command",
+            "command": "cat training.md"
+          },
+          {
+            "type": "command",
+            "command": "echo '--- END training.md ---'"
+          }
+        ]
+      }
     ]
   }
 }
