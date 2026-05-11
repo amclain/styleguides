@@ -28,6 +28,18 @@ test "publishes the lux reading to the property table"
 test "combines the high and low register words into a 32-bit lux value"
 ```
 
+The same principle applies when the value is externally observable but is a mechanism the test happens to use to verify the feature, not the feature itself. A name that pins a specific counter, exit code, status integer, or side-effect channel describes what the test watches; the feature is what the system does. Prefer the feature-level name and let the specific mechanism live in the test body as an assertion.
+
+CAUTION: this is a prose-judgment question, not an architecture question. Do not resolve "feature or mechanism" by checking whether the value is part of the documented API. A value can be promised by the spec and still read as a mechanism pin in a test description — the question is whether the description names the behavior being verified or names the specific thing the test inspects to verify it. Read the description on its own terms; the codebase does not answer this question.
+
+```elixir
+# good — names the feature
+test "marks the sensor offline when the heartbeat times out"
+
+# avoid — pins the specific counter and threshold the test watches
+test "increments the missed_heartbeat_count past 3 when the heartbeat times out"
+```
+
 ```elixir
 # good — describes a specific behavior
 test "returns an error when the network is unreachable"
@@ -41,6 +53,22 @@ test "connection defaults to port 6379"
 test "connect/1"
 test "test_connect"
 ```
+
+**Parallel construction across PASS/FAIL pairs.** When a behavior has both positive and negative coverage, write the pair with parallel structure: the same connective (`if`, `when`, `unless`), the same verb pattern, and the same subject ordering. A reader scanning the test list should see the pair as a pair without reconstruction.
+
+```elixir
+# good — parallel; the pair reads as one specification with two cases
+test "publishes a reading if the sensor is online"
+test "does not publish a reading if the sensor is offline"
+
+# avoid — mixes connectives and verb shapes; the pair is the same idea but does not look like one
+test "publishes a reading when the sensor is online"
+test "fails to publish if the sensor is offline"
+```
+
+The PASS and FAIL members of a pair sometimes live in different files — for example, the PASS test in a normal test file and the FAIL test in a file that needs a different test apparatus (subprocess observation, fault injection). Parallel construction still applies; the file separation is incidental.
+
+CAUTION: this is a cross-test rule, not a per-test rule. Per-test rules (behavioral proposition, plain language, detokenize) evaluate each name on its own. A pair can pass every per-test rule and still be non-parallel — each name is a valid description, but the two together do not present as a pair. When a behavior has both PASS and FAIL coverage, evaluate the names side by side, not one at a time.
 
 **Casing.** Test descriptions and grouping labels are written in lowercase. The exceptions are abbreviations and initialisms that are conventionally uppercase (HTTP, JSON, TCP, I2C) and proper nouns, which are rare in test descriptions. A description is prose inside a string literal, not a sentence at the top of a paragraph - there is no reason to capitalize the first word, and doing so creates visual noise when test frameworks concatenate nested block descriptions into output.
 
@@ -64,6 +92,53 @@ void test_set(void) { ... }
 // In Google Test, the same principle applies:
 // TEST(Sensor, ReturnsNegativeOnHardwareFailure) { ... }
 // TEST(Sensor, ReturnsCalibratedValue) { ... }
+```
+
+**A test file specifies its file subject.** A reader of one test file should be able to understand what that subject does without cross-referencing other test files. The file's subject is whichever unit the file is for - a module, a function, a mock, a handler, a parser, a behaviour implementation - and the tests in that file directly exercise that subject's contract.
+
+When a module or library contains multiple symmetric units that implement a shared idiom (multiple mocks following the same configure / call / inspect / callback / reset pattern, multiple handlers conforming to the same dispatch shape, multiple parsers following the same parse-and-validate shape, multiple Elixir behaviour implementations conforming to the same callbacks), each unit gets its own dedicated test file. Symmetry between units is a fact about the source, not a fact about the spec - the spec for each unit is the test file that names it as its subject.
+
+The failure mode this rule prevents has two shapes:
+
+- *Primary-vehicle pattern* (more common in C and other identifier-named-test frameworks): one unit becomes the test surface for the shared idiom; the other units have one or zero dedicated tests and are assumed to inherit coverage by symmetry. The other units are undercovered - they could be broken in any number of ways and no test would fail.
+- *Multi-subject file* (more common in Elixir, Ruby, JavaScript, and other frameworks with grouping blocks like `describe`): a single test file holds tests for several symmetric units, often grouped under per-unit `describe` blocks. Coverage exists for every unit, but no test file specifies any one unit - a reader looking for "what does `MsgPackEncoder` do" finds it intermixed with `JSONEncoder` and `XMLEncoder`. The file's subject is unclear, and as units diverge over time the shared file accumulates conditional logic that obscures what each unit specifically promises.
+
+Both failures violate the per-file-subject principle. The fix is the same: one test file per unit, naming that unit as its subject.
+
+Test names may be identical across symmetric files when they verify the same proposition - the file subject (the unit) scopes them. `test_returns_configured_value` in `test_mock_sensor.c` and `test_returns_configured_value` in `test_mock_actuator.c` are not duplicates; each scopes the proposition to its own subject. The same applies in Elixir: `test "returns the configured value"` in `mock_sensor_test.exs` and the same description in `mock_actuator_test.exs` are not duplicates.
+
+```c
+// good - per-unit test files; each file specifies its own subject
+test/test_mock_sensor.c        // tests mock_sensor's configure / call / inspect / callback / reset contract
+test/test_mock_actuator.c      // tests mock_actuator's configure / call / inspect / callback / reset contract
+test/test_mock_indicator.c     // tests mock_indicator's configure / call / inspect / callback / reset contract
+
+// avoid - primary-vehicle pattern: mock_sensor is the test surface for the shared idiom;
+// mock_actuator and mock_indicator have one or zero tests each and inherit coverage by symmetry
+test/test_mocks.c               // 12 tests for mock_sensor, 1 for mock_actuator, 0 for mock_indicator
+```
+
+```elixir
+# good - per-unit test files; each file specifies its own subject
+test/myapp/encoders/json_encoder_test.exs       # specifies JSONEncoder
+test/myapp/encoders/xml_encoder_test.exs        # specifies XMLEncoder
+test/myapp/encoders/msgpack_encoder_test.exs    # specifies MsgPackEncoder
+
+# avoid - multi-subject file: every encoder is covered, but no file specifies any one of them
+test/myapp/encoders_test.exs
+defmodule MyApp.EncodersTest do
+  describe "JSONEncoder" do
+    test "encodes the value" do ... end
+  end
+
+  describe "XMLEncoder" do
+    test "encodes the value" do ... end
+  end
+
+  describe "MsgPackEncoder" do
+    test "encodes the value" do ... end
+  end
+end
 ```
 
 ---
@@ -102,6 +177,14 @@ test "connection" do
   assert :ok = disconnect(conn)
 end
 ```
+
+**A scenario is a situation, not an API operation.** When deciding what counts as "one concept" for a test, frame it as a *situation* (what's happening to the unit under test) rather than an *API feature* (which function is being called). The API surface a test exercises - configure, call, inspect, callback, reset - is the *steps* inside the test, not the scenarios the test specifies.
+
+Typical scenarios at the unit level: success path, failure path, multi-call sequence, inspection of prior call, default (uninitialized) state, post-cleanup state, edge cases (empty input, boundary values, concurrent access where relevant). A unit's tests catalog the situations its callers will encounter; the API operations are how each situation is set up and observed.
+
+The over-decomposition failure: treating each API function as its own scenario produces a test per function, not a test per situation. For a mock with five API functions (configure response, install callback, inspect arguments, count calls, reset) and five situations to specify, this would produce five API functions × five situations = twenty-five tests, most of them re-exercising the same scenario through different API entry points without specifying anything new about the unit's behavior.
+
+Within a situation, separate propositions still get separate tests. "The mock returns the configured status on the next call" and "the mock invokes the installed callback on the next call" are two propositions that can fail independently; both are part of the success-path situation, but they need their own tests so a failure points at the right thing. The rule is: situations bound the scenario count; independent propositions within a situation bound the test count within that scenario.
 
 ---
 
@@ -275,3 +358,17 @@ assert {:ok, conn} = connect(opts)  # fails if conn fields differ from expected
 ```
 
 Language-specific guides describe the assertion style for each framework (e.g. `eq`/`be_truthy` in ESpec, `==`/`match?` in ExUnit).
+
+---
+
+## Test Sentinel Values
+
+When a test needs an arbitrary recognizable non-zero value as a placeholder - a sentinel for a pointer, output parameter, or value the test does not otherwise constrain - use a value the reader will not pause on. Avoid cultural references: hex literals whose digits spell English (`0xDEADBEEF`, `0xCAFEBABE`, `0xC0FFEE`), integers from popular culture (`42`, `1337`), and any value a reader is likely to recognize from a context other than this test.
+
+The recognition is the bug. Developers reach for these values because they are memorable, and that is exactly the problem - a sentinel should disappear behind the test's intent, not draw attention. A reader reaching `0xDEADBEEF` or `42` pauses to evaluate whether the value is significant. It isn't, but the pause is wasted attention and the test reads as if it's testing something it isn't.
+
+Use an obviously arbitrary literal repeated in both the configuration and the assertion. Any non-referential value works - the requirement is that it not carry meaning a reader has to evaluate. Do NOT introduce a named local constant purely to rename the literal - for simple sentinels, the inline literal is the canonical form. Reach for a named constant only when the name carries information the literal cannot: the value is computed from a base, the name documents a symbolic property, or the value flows through enough places that consistency matters.
+
+When a test needs multiple distinct sentinels, use a sequence whose members are visually distinct in code and in failure messages. Two values that differ in a single digit late in the literal disappear when scanning a long line; values that differ in their leading digit or use a repeated-digit pattern stand apart. Pick whatever pattern is easiest to spot at a glance.
+
+Language-specific guides instantiate this principle with concrete defaults appropriate to that language's idioms (e.g. specific hex values in `c/testing.md` where hex is the conventional sentinel form). Use those defaults when the language guide provides them; otherwise apply the principle directly.

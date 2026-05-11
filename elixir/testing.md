@@ -1,6 +1,6 @@
 # Elixir Testing Style Guide
 
-Testing conventions for Elixir. Part of the Elixir style guide — loaded automatically via `@` import from `elixir/CLAUDE.md`.
+Testing conventions for Elixir. Part of the Elixir style guide — loaded on demand when test code is in scope (read directly via the Read tool; not propagated to subagents via `@` import).
 
 ---
 

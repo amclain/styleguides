@@ -1,6 +1,6 @@
 # C Testing Style Guide
 
-Testing conventions for C. Part of the C style guide - loaded automatically via `@` import from `c/CLAUDE.md`.
+Testing conventions for C. Part of the C style guide - loaded on demand when test code is in scope (read directly via the Read tool; not propagated to subagents via `@` import).
 
 The general style guide's testing principles apply to C without modification. This file covers how those principles map to C-specific testing frameworks and idioms.
 
@@ -48,6 +48,31 @@ The module name is already in the file name - don't repeat it in every test func
 - `test_value_preserved` → "sensor, value preserved" - missing auxiliary verb ("is preserved")
 
 Noun-leading names are valid when the name introduces its own scenario subject scoped to the file. `test_unknown_sensor_returns_error` in `test_registry.c` reads as "registry, unknown sensor returns error" - a complete proposition where "unknown sensor" is the scenario subject within the registry's scope.
+
+**Identifier-as-English-verb pitfall.** API tokens (function names, struct field names) often contain words that are also English verbs. When such a token appears in a test name, the detokenized form can parse as a grammatical sentence while the proposition is wrong - the token is being read as a verb describing behavior, but it is just an identifier. The Question 1 check below catches grammar problems but can be fooled by this case because the sentence parses.
+
+This pitfall has two shapes. Both are easy to miss because the names sound natural.
+
+*Shape 1: API token leads, then a real verb follows.* The leading token reads as the sentence's subject-verb when it is actually the API function name. Examples (for `mock_sensor.h` in `test_mock_sensor.c`):
+
+- `test_responds_returns_configured_status` → "mock sensor, responds returns configured status" - parses (subject "responds", verb "returns") but `_responds` is the configuration setter identifier, not a verb. The mock returns the status; `_responds` does nothing in the proposition.
+- `test_received_returns_false_before_any_call` → "mock sensor, received returns false before any call" - parses but `_received` is the inspector identifier; the proposition is about what the inspector returns, not about the mock's behavior.
+- `test_reset_clears_all_configured_state` → "mock sensor, reset clears all configured state" - parses but `_reset` is the function being called; the proposition names the action, not the outcome (see Question 2 below for a related framing).
+
+*Shape 2: API token chains with another API token, parsing as a multi-word sentence.*
+
+- `test_set_callback_dispatches_to_callback_with_caller_args` → "mock sensor, set callback dispatches to callback with caller args" - parses (subject "set callback", verb "dispatches") but `_set_callback` is the installer identifier, not a behavior of the mock.
+
+The recast: make the file subject (the unit under test) the grammatical subject and pick a verb that describes its observable behavior. The API token becomes the test's mechanism, not its proposition.
+
+- `test_responds_returns_configured_status` → `test_returns_configured_status_on_the_next_call`
+- `test_received_returns_false_before_any_call` → `test_reports_no_call_when_inspected_before_any_call`
+- `test_reset_clears_all_configured_state` → `test_returns_to_uninitialized_state_after_reset`
+- `test_set_callback_dispatches_to_callback_with_caller_args` → `test_invokes_installed_callback_with_caller_args`
+
+Noun-leading scenario forms remain valid when the API token is naturally a noun phrase: `test_call_count_increments_with_each_invocation` detokenizes cleanly because "call count" is a noun, "increments" is the verb, and the file subject scopes both. The pitfall is API-token-as-verb, not API-token-as-noun.
+
+CAUTION: when a test name's leading token is itself a function name from the unit under test (`_reset`, `_received`, `_responds`, `_init`, `_close`), inspect the name carefully. The name often violates this rule even when the rest of the name parses cleanly - especially in mock APIs where the function names are configuration/inspection setters rather than behavior verbs. Recast so the file subject is the grammatical subject, and the API token appears later as the mechanism (e.g. "after reset", "when inspected"). Some leading tokens (`_init`, `_close`) describe genuine behavior in non-mock contexts and may be correct as written; the recast is needed when the token is a procedural identifier rather than a verb naming what the unit does.
 
 **Three questions for finding the right name:**
 
@@ -100,6 +125,41 @@ void test_sensor_returns_calibrated_value(void) { ... }  // in test_sensor.c
 ```
 
 Test names can be long. A descriptive 60-character function name is better than a cryptic 20-character one.
+
+Long test names interact with the test runner's call site. The `RUN_TEST(name);` line is `2 indent + 9 RUN_TEST + 1 ( + name + 2 );` characters; a 67-character test name produces an 81-character call line, exceeding the 80-character limit. Wrap the call across multiple lines per `c/CLAUDE.md` § Brace Style — single-arg macro wraps follow the same rule as multi-arg function calls: the test name goes on its own line at body indent, and the closing `);` goes together on its own line. Do not split `)` and `;` onto separate lines, and do not glue `);` to the test name on the wrap line. The styleguide-canonical form is three lines: `RUN_TEST(`, the test name indented, `);` on the closing line.
+
+---
+
+### Test Function Docstrings
+
+Test functions are bare `void test_*(void)` declarations with no Doxygen docstring or `@brief` block. Test files are `.c` files, not headers, and test functions are not public API. Doxygen extracts public documentation from header declarations - test functions have no header declaration and never appear in generated documentation. A docstring on a test function is read by no one and is pure noise in the source.
+
+The same reasoning extends to test-file-local helpers (forward-declared `static` helpers used by the tests) and inline fixture extensions. None are extracted by Doxygen, so docstrings on them are equally noise.
+
+The test name already carries the behavioral specification (per Test Function Naming above) for any reader scanning the file directly. Section-grouping comments above clusters of tests are allowed (see Test Runner below) - per-function Doxygen blocks are not.
+
+```c
+// good - bare declaration, body opens on next line
+void test_returns_calibrated_value(void)
+{
+  // ...
+}
+
+// avoid - Doxygen block on a test function
+/**
+ * @brief Verifies the calibrated value is returned after init.
+ */
+void test_returns_calibrated_value(void)
+{
+  // ...
+}
+
+// avoid - brief-only block on a test function
+/** @brief Returns calibrated value after init. */
+void test_returns_calibrated_value(void) { ... }
+```
+
+This is a specific case of `c/CLAUDE.md`'s Comment Style rule that "static (file-internal) functions do not require a docstring, but may have one if the function is complex." For test functions the answer is "no, never" because Doxygen extraction never reaches them - the complexity case the static-function rule allows for is not the relevant axis here.
 
 ---
 
@@ -168,11 +228,57 @@ int main(void)
 
 Comments as section headers provide the grouping that C lacks from `describe`/`context` blocks. Keep them terse - one line, lowercase.
 
+When the test file contains a hand-written `main()` (Unity binaries with manual runners, or Google Test files with custom setup), place `main()` at the very end of the file, after all test functions and helper definitions. The runner is the file's index of tests - placing it at the bottom keeps test functions contiguous and matches C's natural forward-declaration ordering: helpers and tests defined before the runner that references them, with no top-of-file forward declaration block needed.
+
+Most Google Test files do not have a hand-written `main()` - linking against `gtest_main` provides the default entry point that calls `::testing::InitGoogleTest` and `RUN_ALL_TESTS`. Write a custom `main()` only when the test binary needs setup the default cannot provide (custom environment objects, custom flag parsing). When you do, the placement rule above applies.
+
+Default to `int main(void)` for hand-written runners. When a project adopts Unity's command-line filtering (`-f <substring>`, `-n <name>`, `-x <exclude>`), every test binary in that project uses the same `main(int argc, char** argv)` signature. Mixing `main(void)` and `main(int, char**)` across binaries within a filtering-enabled project breaks shared test-invocation tooling and confuses operators - the choice is project-wide, not per-binary. Unity's default `RUN_TEST` macro does not consult the parsed filters; getting filtering to work requires a per-project override. See `c/unity.md` for the mechanics, the override header, and the CMake wiring.
+
 ---
 
 ## Test Code Principles
 
 Tests are not implementation code. The goal of a test is to tell a story: what is set up, what action is taken, what is asserted. Formatting rules serve this story.
+
+### Test Sentinel Values
+
+When a test needs an arbitrary recognizable non-zero value as a placeholder (a sentinel for a pointer, output parameter, or value the test does not otherwise constrain), use a value the reader will not pause on. Avoid cultural references: hex literals whose digits spell English (`0xDEADBEEF`, `0xCAFEBABE`, `0xC0FFEE` and the broader hex-word family), integers from popular culture (`42`, `1337`), and any value a reader is likely to recognize from a context other than this test.
+
+The recognition is the bug. Developers reach for these values because they are memorable, and that is exactly the problem - a sentinel should disappear behind the test's intent, not draw attention. A reader reaching `0xDEADBEEF` or `42` pauses to evaluate whether the value is significant. It isn't, but the pause is wasted attention and the test reads as if it's testing something it isn't.
+
+Default sentinels: `0x12345678` (32-bit), `0x123456789abcdef0` (64-bit). Any non-referential value works. Repeat the same literal in the configuration and in the assertion - for simple sentinels, this is clearer than introducing a named local that only renames the literal.
+
+When a test needs multiple distinct sentinels (two pointers to distinguish, three handles to track), use a scannable sequence rather than incrementing the default by one. `0x11111111`, `0x22222222`, `0x33333333` are visually distinct in code and in failure messages; `0x12345678` and `0x12345679` are not - the difference disappears in a long line. Pick the pattern that is easiest to spot: repeated-nibble values (`0x11111111`, `0x22222222`), low integers (`0x00000001`, `0x00000002`), or any sequence where each value is unambiguously different from the others at a glance.
+
+```c
+// good - non-referential literal repeated in config and assertion
+mock_set_response(SUCCESS, 0x12345678);
+
+uint32_t output = 0;
+read_value(&output);
+
+TEST_ASSERT_EQUAL_UINT32(0x12345678, output);
+
+// avoid - cultural reference draws the reader's attention
+mock_set_response(SUCCESS, 0xDEADBEEF);
+
+uint32_t output = 0;
+read_value(&output);
+
+TEST_ASSERT_EQUAL_UINT32(0xDEADBEEF, output);
+```
+
+Reach for a named `const` only when the name carries information the literal cannot - when the value is computed from a base, when the test specifies a symbolic property the name documents (`SENTINEL_PARENT_HANDLE`), or when the same value flows through enough places that consistency matters.
+
+```c
+// good - named const carries information the literal cannot;
+// scannable sequence distinguishes the two
+#define SENTINEL_PARENT_HANDLE  ((const void*) 0x11111111)
+#define SENTINEL_CHILD_HANDLE   ((const void*) 0x22222222)
+
+// avoid - the name only renames the literal; just write 0x12345678
+#define SENTINEL_OUTPUT_VALUE 0x12345678
+```
 
 ### Test Variable Placement
 
@@ -318,7 +424,7 @@ Use the most specific assertion macro available. Specific assertions produce bet
 // good - prints both values on failure
 TEST_ASSERT_EQUAL(expected_count, sensor_count());
 TEST_ASSERT_EQUAL_STRING("temperature", sensor_name);
-TEST_ASSERT_EQUAL_UINT32(0xBEEFCAFE, header.magic);
+TEST_ASSERT_EQUAL_UINT32(0x12345678, header.magic);
 TEST_ASSERT_NULL(find_sensor(unknown_id));
 TEST_ASSERT_NOT_NULL(create_sensor(valid_id));
 

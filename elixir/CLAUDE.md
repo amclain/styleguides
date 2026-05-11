@@ -4,8 +4,6 @@ This file defines style conventions for Elixir code. It is used by Claude Code t
 
 The overarching philosophy is defined in the repository's top-level `CLAUDE.md`: these are recommendations, not mandates, and precedence in the codebase takes priority over this guide.
 
-To suppress a suggestion for a specific block, add `# style:ok - reason`.
-
 ---
 
 ## Naming
@@ -1832,8 +1830,6 @@ end
 
 Hard limit of 80 characters. When a line exceeds this, break it — the need to break is usually a signal that the code is too complex, and restructuring it will improve readability. See `general/CLAUDE.md` for the rationale.
 
-Use `# style:ok` to suppress this for a specific line when the length is purely a consequence of long names and the line is not genuinely complex.
-
 ---
 
 ### Blank Lines
@@ -2026,13 +2022,6 @@ def init(_), do: ...
 defp helper, do: ...
 ```
 
-Annotation keywords use `# TAG:` format:
-- `# TODO:` — missing feature to add later
-- `# FIXME:` — broken code that needs fixing
-- `# OPTIMIZE:` — slow or inefficient code
-- `# HACK:` — questionable practice that should be refactored
-- `# REVIEW:` — needs verification of correctness
-
 ---
 
 ### Zero-Arity Calls
@@ -2072,7 +2061,7 @@ Match string prefixes using the concatenation operator `<>`, not binary pattern 
 
 ## Testing
 
-Testing rules are defined in `elixir/testing.md`, loaded via `@` import at the top of this file.
+Testing rules are defined in `elixir/testing.md`. Load that file when writing or reviewing Elixir tests.
 
 ## Deprecated Rules
 

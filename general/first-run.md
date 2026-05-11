@@ -32,9 +32,10 @@ Use the absolute path of the styleguides directory. Only `general/CLAUDE.md` nee
 Copy the formatting skills from the styleguides repo into the project's `.claude/skills/` directory. This makes them auto-discoverable by Claude Code.
 
 ```
-mkdir -p .claude/skills/format-code .claude/skills/format-review .claude/skills/style-report .claude/skills/update-styleguide
+mkdir -p .claude/skills/format-code .claude/skills/format-review .claude/skills/format-rewrite .claude/skills/style-report .claude/skills/update-styleguide
 cp <repo_root>/skills/format-code/SKILL.md .claude/skills/format-code/SKILL.md
 cp <repo_root>/skills/format-review/SKILL.md .claude/skills/format-review/SKILL.md
+cp <repo_root>/skills/format-rewrite/SKILL.md .claude/skills/format-rewrite/SKILL.md
 cp <repo_root>/skills/style-report/SKILL.md .claude/skills/style-report/SKILL.md
 cp <repo_root>/skills/update-styleguide/SKILL.md .claude/skills/update-styleguide/SKILL.md
 ```
@@ -73,6 +74,25 @@ If the permission entry is missing or the file does not exist:
 4. Save the result to memory once resolved so this check does not repeat.
 
 Use the absolute path of the styleguides directory. The double-slash prefix (`//`) replaces the leading `/` of an absolute path in Claude Code permissions. For example, the path `/home/user/styleguides` becomes `Read(//home/user/styleguides/**)` - not `Read(///home/user/styleguides/**)`.
+
+---
+
+## Mechanical Check Permissions
+
+For each language detected by the Language Guide Discovery check, verify that the project's Claude Code permissions cover the Bash commands the language's mechanical checks (Task 1.1 of the style review framework) will need to run. This check is what prevents Task 1.1 from aborting mid-review on a missing allowlist pattern - per `general/review-orchestration.md` § 4 Error Handling, an aborted Task 1.1 halts the entire review workflow until the user updates permissions, so catching missing patterns up front is the difference between a clean first review and a stop-and-fix-and-rerun cycle.
+
+Procedure:
+
+1. For each detected language, locate the language's mechanical-check section in `general/review-orchestration.md` § 2.x.1 (e.g., § 2.1.1 for C). The section lists the Bash commands the framework runs - grep variants, awk scripts, perl one-liners, etc.
+2. Identify the **leading-word tokens** of those commands - the first word of each command, which is what Claude Code's permission allowlist matches against. For C, the leading-words are typically `grep`, `awk`, and `perl`.
+3. For each leading-word, verify that a matching `Bash(<word>:*)` entry is present in either `.claude/settings.json` (project-wide, committed) or `.claude/settings.local.json` (per-user/machine, not committed). Either location is acceptable; the framework only needs the pattern to be present.
+4. If any leading-word's permission entry is missing:
+   - Inform the user which language detected, which command needs permission, and which allowlist pattern would resolve it.
+   - Offer to add the missing patterns to `.claude/settings.local.json` (the per-user/machine file - safer default than committing).
+   - Do not create or modify the file without the user's confirmation.
+5. Save the verified state to memory once resolved so this check does not repeat. If the project's mechanical-check command set changes (e.g., a new check is added to § 2.x.1 in a future styleguide update), the check will re-run when memory is invalidated by the user or when the user explicitly re-runs first-run checks.
+
+The check is language-driven, not hardcoded: the mechanical-check commands are defined in the loaded styleguide per language, and the first-run check reads them from there. When a new language is added to the styleguide or an existing language's mechanical-check set is updated, this check picks up the change without modification.
 
 ---
 

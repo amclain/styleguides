@@ -4,8 +4,6 @@ This file defines style conventions for C code. It is used by Claude Code to app
 
 The overarching philosophy is defined in the repository's top-level `CLAUDE.md`: these are recommendations, not mandates, and precedence in the codebase takes priority over this guide.
 
-To suppress a suggestion for a specific block, add `// style:ok - reason`.
-
 ---
 
 ## Naming
@@ -50,7 +48,21 @@ app_app_connection_open(&conn, &config);
 
 Good C names will be longer than equivalent names in languages with modules or namespaces. This is expected - the global namespace requires each name to carry its full context.
 
-Do not abbreviate `buffer` to `buf`, `length` to `len`, `message` to `msg`, `source` to `src`, `destination` to `dst`, or `checksum` to `cksum`. Write the full word. Use `size` as a concise alternative to `length` where appropriate (e.g. `buffer_size` instead of `buffer_length`). Accepted short forms: `ptr` (pointer), `fd` (file descriptor), `cb` (callback) - these are domain terms, not abbreviations. The closed list above is not exhaustive - apply the Domain Terms vs. Arbitrary Abbreviations rule from `general/CLAUDE.md` for short forms not listed here.
+Do not abbreviate `buffer` to `buf`, `length` to `len`, `message` to `msg`, `source` to `src`, `destination` to `dst`, or `checksum` to `cksum`. Write the full word. Use `size` as a concise alternative to `length` where appropriate (e.g. `buffer_size` instead of `buffer_length`). Accepted short forms: `ptr` (pointer), `fd` (file descriptor), `fn` (function pointer) - these are domain terms, not abbreviations. The closed list above is not exhaustive - apply the Domain Terms vs. Arbitrary Abbreviations rule from `general/CLAUDE.md` for short forms not listed here.
+
+When a sanctioned short form appears in descriptive prose (docstrings, design documents, test plans, comments), expand it to the full word when the prose describes the mechanic or role. Use the short form only when the prose references the literal argument: in backticks naming the variable, when showing the signature or call form, or when discussing the variable's identity. The two forms serve different readers - code tokens identify a variable, prose describes the concept.
+
+```c
+// good - call form uses the short name; mechanic prose uses the full word
+// After `mock_sensor_set_callback(fn)`, the registered callback runs with
+// the caller's arguments.
+
+// good - prose discussing the variable's identity uses the short name
+// The argument `fn` must remain valid for the lifetime of the registration.
+
+// avoid - mechanic prose carrying the short form
+// After `mock_sensor_set_callback(fn)`, fn runs with the caller's arguments.
+```
 
 Standard acronyms from formal specifications (RFCs, IEEE standards) are acceptable in constant names when the acronym is the term used in the specification. Examples: `IHL` (Internet Header Length, RFC 791), `DSCP` (Differentiated Services Code Point, RFC 2474), `ECN` (Explicit Congestion Notification, RFC 3168), `TTL` (Time To Live). Spelling these out (`INTERNET_HEADER_LENGTH`) would make the identifiers harder to cross-reference with the source documentation. When RFC acronyms are used, add a comment referencing the relevant RFCs - either above the `#define` group or as a top-level file comment if the RFCs apply to the entire file. This follows the general guide's Documentation Notation rule: write it in the notation the documentation uses.
 
@@ -84,9 +96,9 @@ reading.temperature = raw_value * scale;
 
 // good - struct field is concise; the struct type provides context
 typedef struct {
-  uint16_t port;
-  app_protocol_t protocol;
-} app_port_rule_t;
+  uint16_t address;
+  sensor_protocol_t protocol;
+} sensor_channel_binding_t;
 ```
 
 **When to deviate**: When heavily integrating against an established C codebase (POSIX sockets, lwIP), match its naming conventions for consistency at the integration boundary. Prefer explicit names like `ip_address` over `in_addr` in your own code.
@@ -214,7 +226,7 @@ Do not interleave `#define` constants with enum and struct type definitions, eve
 
 **Convention**: 80 characters is the hard limit. Count characters when writing or modifying code - do not rely on visual estimation. See the general guide's Line Length rule for the cognitive load heuristic - a line with many components warrants splitting even under 80 characters.
 
-**When to deviate**: Long string literals (see String Literals rule below), include paths, or URLs that cannot be meaningfully broken. Use `// style:ok` for these.
+**When to deviate**: Long string literals (see String Literals rule below), include paths, or URLs that cannot be meaningfully broken.
 
 ---
 
@@ -267,7 +279,11 @@ const char* message =
 
 **Convention**: Based on K&R. Single-line function signatures get the opening brace on the next line. Control flow (`if`, `for`, `while`, `switch`, `do`) gets the opening brace on the same line. `else` and `else if` go on a new line after `}` - each control block is a clear, self-contained unit.
 
-Only split function signatures to multiple lines when the single-line version exceeds 80 characters. When splitting, keep the return type on the same line as the function name and split the arguments to multiple lines. Do not split the return type to its own line - always split on arguments instead. `) {` go together on the closing line - **never** `) \n{`. This is a common mistake. The closing paren and opening brace must be on the same line: `) {`. The `) {` serves the same role as `\n{` on a single-line signature - a uniform visual separator between function args and body. Putting `{` on yet another line adds too much visual gap.
+Only split function signatures to multiple lines when the single-line version exceeds 80 characters. When splitting, keep the return type on the same line as the function name and split the arguments to multiple lines. Do not split the return type to its own line - always split on arguments instead. The exception is zero-argument signatures: when there are no arguments to split (`(void)`) and the single-line signature still exceeds 80 characters, place the return type on its own line and the function name + `(void)` on the next line. This is the only legitimate split for zero-arg signatures. `) {` go together on the closing line - **never** `) \n{`. This is a common mistake. The closing paren and opening brace must be on the same line: `) {`. The `) {` serves the same role as `\n{` on a single-line signature - a uniform visual separator between function args and body. Putting `{` on yet another line adds too much visual gap.
+
+When a function signature or call is split across multiple lines, the closing `)` goes on its own line at the construct's indent level - never glued to the last parameter or argument. The character that follows `)` stays with it on the same line: `{` on a definition (`) {`), `;` on a declaration or call statement (`);`), or whatever syntactic punctuation continues the expression. This rule applies to definitions, declarations, and call sites uniformly. It also applies to single-argument call sites that wrap (e.g. a macro call whose argument pushes the line past 80 characters): the wrapped form is `RUN_TEST(\n  test_name\n);` with the closing `)` on its own line, not `RUN_TEST(\n  test_name);` with `);` glued to the argument. Splits happen to satisfy line-length requirements; if the construct fits on one line, keep it on one line.
+
+Exception: when a multi-line call is the entire condition of an `if`, `while`, or `for`, the call's closing `)` and the control-flow construct's closing `)` go together as `))` on their own line - not split onto separate lines. See § Line Breaks in Long Expressions § Multi-line function calls inside `if` conditions for the full pattern. Splitting `))` onto two lines fragments a single semantic unit and pushes the body indent across two visual hops.
 
 Multi-line parameters are indented one level (2 spaces) from the left margin - not aligned to the opening paren, and not at a deeper indent than the function body. One parameter per line. The same one-per-line principle applies to function call sites when they are split to multiple lines.
 
@@ -285,6 +301,39 @@ static void error_handler(
   uint8_t reason,
   bool server
 ) {
+  // ...
+}
+
+// good - multi-line declaration: `);` on its own line at function indent
+sensor_status_t sensor_write(
+  sensor_t* sensor,
+  const void* data,
+  size_t length,
+  size_t* out_written
+);
+
+// good - multi-line call site: `);` on its own line at the call's indent
+sensor_write(
+  sensor,
+  data,
+  length,
+  &written
+);
+
+// good - single-arg macro wrap (test name pushes call past 80 chars):
+// closing `)` on its own line, same rule as multi-arg splits
+RUN_TEST(
+  test_register_channel_with_callback_defers_until_lock_release
+);
+
+// good - zero-arg signature over 80 chars: return type on its own line
+mock_sensor_resources_find_channel_args_t
+mock_sensor_resources_find_channel_received(void);
+
+// good - zero-arg definition over 80 chars: same split, brace on next line per single-line-signature rule
+mock_sensor_resources_find_channel_args_t
+mock_sensor_resources_find_channel_received(void)
+{
   // ...
 }
 
@@ -369,12 +418,34 @@ int sensor_configure(
   // ...
 }
 
+// avoid - multi-line declaration: `);` glued to last parameter line
+sensor_status_t sensor_write(
+  sensor_t* sensor,
+  const void* data,
+  size_t length,
+  size_t* out_written);
+
+// avoid - multi-line call site: `);` glued to last argument line
+sensor_write(
+  sensor,
+  data,
+  length,
+  &written);
+
+// avoid - single-arg macro wrap with `);` glued to the argument
+RUN_TEST(
+  test_register_channel_with_callback_defers_until_lock_release);
+
 // avoid - return type on separate line; always split on arguments instead
 sensor_result_t
 sensor_init(sensor_t* sensor)
 {
   // ...
 }
+
+// avoid - zero-arg signature kept on one line over 80 chars; the carve-out
+// applies because there are no arguments to split on
+mock_sensor_resources_find_channel_args_t mock_sensor_resources_find_channel_received(void);
 
 // avoid - function brace on same line as single-line signature
 int start_services(void) {
@@ -553,16 +624,56 @@ int total = count+offset;
 
 **Convention**: Three comment forms, each with a distinct role:
 - `/** */` for Doxygen documentation (functions, types, files)
-- `//` for inline/explanatory comments in code
+- `//` for any non-Doxygen, non-header-guard prose comment, regardless of line count or position - inline trailing, standalone single line, or multi-line block. Multi-line prose uses stacked `//` lines, one per logical line.
 - `/* GUARD */` for header guard closing comments (when not using `#pragma once`)
 
 Doxygen uses `@` prefix for tags (`@brief`, `@param`, `@return`), not `\`. Use `///<` for trailing inline docs on struct fields, enum values, and `#define` constants. Align `@param` descriptions within their group. `@return` gets its own block separated by a blank line from the `@param` block.
+
+For a `#define` constant, the form choice is between three options, in this order of preference:
+
+- **No comment.** Most `#define` constants do not need their own docstring. The constant's meaning is typically carried by the file `@brief`, by the function that takes or returns it, or by the constant's name itself. A noisy comment that paraphrases the name is worse than no comment - see § Identifier Comment Redundancy Test for the principle and § Constants and Enum-Element Documentation for the site-specific exceptions.
+- **Trailing `///<`** when a constant or group of constants warrants a short clarifying comment. For groups, the trailing form aligns column-wise across the members. For a standalone constant that needs a short single-line annotation, trailing is still the right form - block form is not the fallback when no group-context applies.
+- **Block form `/** @brief X */`** only when the comment genuinely does not fit a single line - a multi-sentence contract description, a multi-paragraph contract that callers must read in full, or a constant whose use carries hidden complexity that needs paragraphs to convey. Standalone-ness alone does not justify block form; a single `#define` whose comment fits on one line uses trailing `///<`, not block.
+
+```c
+// good - no comment; the constant's name carries it and the file @brief
+// covers the configuration domain
+#define SENSOR_DEFAULT_POLL_MS 100
+
+// good - trailing ///< on a group of related constants whose annotations
+// align column-wise
+#define SENSOR_REG_STATUS      0x00  ///< Status register; read-only.
+#define SENSOR_REG_CONTROL     0x01  ///< Control register; write to enable channels.
+#define SENSOR_REG_CALIBRATION 0x02  ///< Calibration record base address.
+
+// good - block form when the constant carries a multi-sentence contract
+// that does not fit a single trailing line
+/**
+ * @brief Fixed-point Q-format used for all sensor gain coefficients.
+ *
+ * Gain values supplied to `sensor_set_gain` and stored in calibration
+ * records are interpreted as Q16.16 (16 integer bits, 16 fractional
+ * bits). A floating-point gain `g` is encoded as `(int32_t)(g * (1 <<
+ * 16))`. The driver does not validate this encoding; supplying a value
+ * in any other format produces silently incorrect readings.
+ */
+#define SENSOR_GAIN_Q_FORMAT 16
+
+// avoid - trailing ///< that paraphrases the constant's name and adds
+// nothing the file @brief or the name itself does not already carry
+#define SENSOR_DEFAULT_PORT 8080  ///< Default TCP port for sensor connections.
+
+// avoid - block form for what would be a short trailing comment if it
+// belonged anywhere
+/** @brief Default TCP port for sensor connections. */
+#define SENSOR_DEFAULT_PORT 8080
+```
 
 Do not use section divider comments in any file type - `.c`, `.h`, or test files. This includes `// -- Public API ---`, `// -- Forward declarations ---`, `// -- Helpers ---`, `// -- Tests ---`, and any similar decoration. The code structure is defined by function ordering and `static` visibility, not comments. See the general guide's Write Self-Documenting Code rule.
 
 `/** */` is preferred over `///` for C - `///` silently breaks if one line is missing the prefix. `/** */` is also the format universally parsed by IDEs (VS Code, CLion, clangd) and compatible with all major doc generation paths (Doxygen, Sphinx via Breathe, clang-doc).
 
-All public functions require a Doxygen docstring on the declaration in the header file - not on the implementation in the `.c` file. Header docs ride along with the SDK; source file docs get lost or compiled out. Static (file-internal) functions do not require a docstring, but may have one if the function is complex.
+All public functions require a Doxygen docstring on the declaration in the header file - not on the implementation in the `.c` file. Header docs ride along with the SDK; source file docs get lost or compiled out. Static (file-internal) functions do not require a docstring, but may have one if the function is complex. Test functions are a stricter case — never carry a docstring; see `c/testing.md` § Test Function Docstrings.
 
 ```c
 // good - function docs on declarations in the header
@@ -586,11 +697,12 @@ int result = sensor_read(&sensor, &value);
 if (result < 0)
   return -1; // hardware unreachable
 
-// good - trailing doc on struct fields
+// good - trailing doc on a struct field that needs one
 typedef struct {
-  uint8_t type;       ///< Sensor type identifier
-  uint16_t address;   ///< Hardware register address
-  int32_t offset;     ///< Calibration offset in millivolts
+  uint8_t type;
+  uint16_t address;
+  int32_t offset;
+  uint8_t mode;       ///< SENSOR_MODE_POLLED or SENSOR_MODE_INTERRUPT.
 } sensor_config_t;
 
 // good - trailing doc on enum values
@@ -616,9 +728,403 @@ int sensor_read(sensor_t* sensor, int32_t* value);
 int result = sensor_read(&sensor, &value);
 if (result < 0)
   return -1; /* hardware unreachable */
+
+// avoid - single-line standalone `/* */` prose
+/* Convert raw ADC counts to millivolts using the calibrated reference. */
+int32_t millivolts = (raw * sensor->reference_mv) / SENSOR_ADC_FULL_SCALE;
+
+// good - same comment as `//`
+// Convert raw ADC counts to millivolts using the calibrated reference.
+int32_t millivolts = (raw * sensor->reference_mv) / SENSOR_ADC_FULL_SCALE;
+
+// avoid - multi-line `/* */` prose block
+/*
+ * The hardware loads the gain register only on the next conversion
+ * cycle, so a write here does not take effect until the caller issues
+ * the next sensor_read.
+ */
+sensor->pending_gain = gain;
+
+// good - same comment as stacked `//`
+// The hardware loads the gain register only on the next conversion
+// cycle, so a write here does not take effect until the caller issues
+// the next sensor_read.
+sensor->pending_gain = gain;
 ```
 
 **When to deviate**: Follow the existing style of a codebase. If the project uses `///` for docs, match that.
+
+---
+
+### Type `@brief` Body Shape
+
+**Intent**: Type docstrings (struct, enum, typedef) name what the type IS. They are not the place for architectural narration, layout specifics, or design rationale - those belong in the design document or the file `@brief`.
+
+**Convention**: For struct, enum, and typedef declarations, the `@brief` is a single line that names the type. **A body is the exception, not the default.** When in doubt, omit the body.
+
+A body is justified only when one of these is true:
+
+- A contract-level invariant the caller must know that genuinely cannot fit in the one-line `@brief` (e.g. "Codes other than `OK` are recoverable; precondition violations trap and do not return.").
+- A pair-structured contrast covering the type's paired options, where the type names a paired set of choices.
+- An `@internal` or audience marker required by project convention (see § Internal API Documentation).
+
+The body is **not** for any of the following. These are the recurring leak shapes; flag each one against the decision test below before deciding to drop:
+
+- **Byte-layout placement.** "Sits at offset 0 of the calibration record", "prepended to every reading", "stored inside the opaque sensor handle", "fixed 64 bytes regardless of channel count". Placement is an implementation choice; a unit test that allocates the type differently invalidates the docstring. Placement does not belong in type identity.
+- **Architectural flow narration.** "The driver writes the configuration fields at boot and the ISR reads them on every conversion cycle", "init paths look up the entry whose channel_id matches the requested channel", "delivered to the application at the next polling interval". Describes how the system uses the type, not what the type IS. System behavior belongs in the design doc.
+- **Cross-cutting design properties.** "Both the driver and the recovery thread survive a reset by re-reading this configuration", lifecycle guarantees, recovery protocols, packing rationale ("packed so the on-wire layout matches the I2C register map..."). Design rationale belongs in the design doc and the README.
+- **Field listings dressed as prose.** "Carries the channel's gain and the calibration mode the driver applies on each read..." - the struct definition already lists the fields. Restating them in prose adds no information the reader did not have from looking at the struct.
+- **Audience tutorials.** "Test code reads this layout directly to inspect the calibration state and to seed values for scenarios the public API cannot reach." Audience context belongs in the file `@brief`, not on every type that audience touches.
+- **Implementation arithmetic.** Register-offset computations, conversion-time calculations, range predicates, counter-shape semantics ("free-running"), init sequencing. These describe how the implementation manipulates the type, not what the type IS. Implementation details belong in the implementation file's comments. (A formula that states a *contract* — e.g. a fixed-point encoding the caller must respect — is a contract-level invariant, not an implementation walk; see the good example below.)
+
+```c
+// avoid - body has architectural flow narration, byte-layout placement,
+// and field listing dressed as prose
+/**
+ * @brief Sensor configuration parameters.
+ *
+ * Loaded from the configuration file at startup and applied to every
+ * reading. Packed so the on-wire size matches the layout the calibration
+ * tooling produces. Carries the sensor type, the address of the hardware
+ * register, and a calibration offset the firmware applies to each raw
+ * reading before returning it to the caller.
+ */
+typedef struct {
+  uint8_t type;
+  uint16_t address;
+  int32_t offset;
+} sensor_config_t;
+
+// good - one line; what the type IS
+/**
+ * @brief Sensor configuration parameters.
+ */
+typedef struct {
+  uint8_t type;
+  uint16_t address;
+  int32_t offset;
+} sensor_config_t;
+
+// good - body carries a contract-level invariant the caller must respect:
+// recoverability, trap behavior, and which codes the recovery applies to.
+// The body is not narration; each sentence is a contract a caller relies on.
+/**
+ * @brief Result codes returned by sensor_read() and sensor_write().
+ *
+ * Codes other than `SENSOR_OK` are recoverable; the caller may retry after
+ * the condition that produced the code is cleared. Precondition violations
+ * trap and do not return a code at all.
+ */
+typedef enum {
+  SENSOR_OK            = 0,
+  SENSOR_NOT_READY     = 1,
+  SENSOR_TIMEOUT       = 2,
+  SENSOR_OUT_OF_RANGE  = 3,
+} sensor_status_t;
+```
+
+**Decision test**: for any candidate body sentence, name the contract-level invariant the sentence carries that the type's name does not, and that the caller cannot derive from the type's name plus general programming knowledge. If the sentence is placement, flow, rationale, field listing, audience tutorial, or implementation arithmetic, drop it.
+
+**When to deviate**: A small number of types genuinely need contract-level body content that does not fit in the one-liner - error-code enums whose recovery semantics differ between codes, paired-option enums whose two options must be contrasted to be understood, types with non-obvious lifetime or thread-safety contracts the caller must respect, fixed-point or fixed-precision typedefs whose encoding is the contract. The body is justified in those cases.
+
+---
+
+### Function Docstring Body Shape
+
+**Intent**: A function docstring describes the function's API contract - what the caller passes in, what comes back, and the invariants the caller must respect or the function will guarantee. It is not the place to describe how the function does its work, what internal state it touches, or what cooperating callers in the system observe. Mechanism belongs in source comments and the design document; cross-caller behavior belongs in the type or module documentation. Keeping the docstring at contract-level keeps the public API durable as the implementation evolves.
+
+**Convention**: The docstring's `@brief`, `@param`, and `@return` blocks describe what the caller of *this* function must know to use it correctly. **A body is the exception, not the default.** When in doubt, omit the body.
+
+A body is justified only when one of these is true:
+
+- A contract-level invariant the caller must respect that does not fit in `@param`/`@return` (e.g. "Must be called from the same thread that called `sensor_init`.").
+- A precondition or postcondition that crosses arguments (e.g. "If `length` is non-zero, `buffer` must point to at least `length` writable bytes.").
+- A guarantee about caller-observable state at return that the return value alone does not carry (e.g. "On `SENSOR_BUSY`, `*reading` is left unchanged.").
+
+The body is **not** for any of the following. These are the recurring leak shapes; flag each one against the decision test below before deciding to drop:
+
+- **Restating `@param` or `@return`.** Per-status output tables ("OK → equal to `length`; FULL → 0; TRUNCATED → equal to `payload_size`"), per-argument paraphrases, "returns 0 on success and -1 on failure" prose when the return type and `@return` already carry it. The argument and return blocks are the structured form of this content; restating it in prose adds no information and decays when the structured form changes without the prose being updated.
+- **Internal state-field references.** Naming private struct fields the function touches ("sets `calibration_dirty`"), naming static module variables ("updates the polling counter"), naming any identifier the caller cannot see at the API boundary. The caller does not have visibility into internal state, and naming it leaks implementation detail that constrains future refactoring.
+- **Library mechanism steps.** Describing the function's internal procedure in caller-facing prose ("the function looks up the calibration entry, applies the offset, then writes the result to the output buffer"). Mechanism is the implementation's job; the docstring's job is the contract the caller relies on. A future implementation that achieves the same contract differently invalidates the prose.
+- **Cross-caller behavior.** A docstring on one function that describes another caller's observations ("subsequent calls to `sensor_poll` observe the new calibration"). Each function's docstring describes what *this* caller sees and must do; cross-caller invariants belong in the type, module, or file documentation that the cooperating callers all read.
+- **Architectural or audience narration.** "This function is called by the ISR after each conversion cycle", "test code uses this entry point to seed scenarios the public API cannot reach". System flow and audience context belong in the file `@brief` or the design doc, not on every function the flow touches.
+
+```c
+// avoid - body restates @param out_corrected, names internal state, and
+// describes library mechanism the caller cannot observe
+/**
+ * @brief Apply a calibration table to the sensor's active channels.
+ *
+ * @param sensor         Sensor handle from sensor_init.
+ * @param calibration    Calibration table to apply.
+ * @param out_corrected  Number of channels whose readings were corrected.
+ *
+ * @return SENSOR_OK on success, SENSOR_NOT_READY if the sensor has not
+ *         completed init, SENSOR_OUT_OF_RANGE if any entry's gain is zero.
+ *
+ * Sets the calibration_dirty flag in the sensor state and walks each
+ * channel's calibration entry, applies the offset and gain, then writes
+ * the corrected reading to the channel's output buffer. On SENSOR_OK,
+ * out_corrected equals the active channel count; on SENSOR_NOT_READY,
+ * out_corrected is zero; on SENSOR_OUT_OF_RANGE, out_corrected equals
+ * the number of entries processed before the invalid one.
+ */
+sensor_status_t sensor_calibrate(sensor_t* sensor,
+                                 const calibration_t* calibration,
+                                 size_t* out_corrected);
+
+// good - body removed; @param out_corrected and @return already carry the
+// per-status outcome, and the mechanism is an implementation detail that
+// does not belong in the public contract
+/**
+ * @brief Apply a calibration table to the sensor's active channels.
+ *
+ * @param sensor         Sensor handle from sensor_init.
+ * @param calibration    Calibration table to apply.
+ * @param out_corrected  Number of channels whose readings were corrected.
+ *
+ * @return SENSOR_OK on success, SENSOR_NOT_READY if the sensor has not
+ *         completed init, SENSOR_OUT_OF_RANGE if any entry's gain is zero.
+ */
+sensor_status_t sensor_calibrate(sensor_t* sensor,
+                                 const calibration_t* calibration,
+                                 size_t* out_corrected);
+
+// good - body carries a contract-level invariant that does not fit in
+// @param/@return: a precondition crossing two arguments
+/**
+ * @brief Read up to `length` bytes from the sensor into `buffer`.
+ *
+ * @param sensor  Sensor handle from sensor_init.
+ * @param buffer  Destination buffer.
+ * @param length  Maximum bytes to read.
+ *
+ * @return Number of bytes read, or a negative error code.
+ *
+ * If `length` is non-zero, `buffer` must point to at least `length`
+ * writable bytes. The function does not bounds-check `buffer`.
+ */
+ssize_t sensor_read(sensor_t* sensor, uint8_t* buffer, size_t length);
+```
+
+**Caller-obligation is contract, not mechanism.** A statement that names an action the *caller* must take or refrain from taking ("the caller must initialize the calibration table before calling `sensor_calibrate`", "do not call from an ISR context") is a contract-level invariant and belongs in the body when it does not fit `@param`/`@return`. The mechanism-vs-contract distinction is decided by *whose* action is being described: the library's actions are mechanism (drop them), the caller's obligations are contract (keep them when they don't fit elsewhere).
+
+**Decision test**: for any candidate body sentence, ask: would the caller's correct use of this function change if this sentence were removed? If yes, the sentence is a contract; keep it. If no, the sentence is mechanism, narration, or restatement; drop it. The test fires per sentence, not per docstring; a body with one contract sentence and three mechanism sentences keeps the contract sentence and drops the rest.
+
+**When to deviate**: Documented thread-safety contracts, lifecycle protocols, and cross-call invariants ("must be paired with `sensor_release`") legitimately require body content that exceeds `@param`/`@return`. The body is justified for those.
+
+---
+
+### Identifier Comment Redundancy Test
+
+**Intent**: Identifiers composed of word-tokens already encode an English phrase. A `///<` comment that respaces, paraphrases, or grammatically expands the identifier into prose carries no information beyond what the name itself carries. The reader who can read the identifier already had the meaning; the comment is noise that imposes reading cost without delivering content.
+
+**Convention**: Before writing a `///<` comment on any identifier — enum element, struct field, or `#define` constant in a documented group — apply the redundancy test. (The same principle applies when documenting any identifier with any single-line comment form, but the trailing `///<` is the canonical site where the test runs.)
+
+A "loose `#define`" below means a `#define` constant that is not grouped under a shared `@brief` block — typically a file-scope constant whose context comes from the file `@brief` rather than a group-level docstring.
+
+1. **Detokenize the identifier.** Split on `_` and CamelCase boundaries, lowercase, read the result as the English phrase it forms.
+   - `SENSOR_OUT_OF_RANGE` → "sensor out of range"
+   - `channel_count` → "channel count"
+   - `gainScale` → "gain scale"
+2. **Ask whether a comment would carry information beyond:**
+   - That detokenized phrase
+   - The enclosing type's `@brief` (for enum elements and struct fields) or the file `@brief` (for loose `#define`s)
+   - The routing destination for consumer-specific content. If the meaning is "which subset this function accepts/produces" or "what this function does with the value," route it to the consuming function's `@param`/`@return` block, not to a `///<` here.
+
+If the answer is no, the comment is redundant. Drop it.
+
+The default is bare. A `///<` is justified only when the comment carries information the identifier and its surrounding context cannot — content like an option-set the type alone does not carry, a contract-level invariant the caller must respect, an audience or scope role that disambiguates similarly-named fields, or an acronym expansion the reader cannot recover from the name (e.g. `///< IEEE 802.1AS grandmaster identifier.` on a constant whose name uses an acronym not derivable from C training-data context). The site-specific sub-sections below name what content counts as justified for each application site.
+
+#### Failure shapes
+
+Three patterns produce redundant comments. Recognize each in your own draft before writing the comment, not after.
+
+**Failure shape 1 - respacing the identifier.** The comment is the detokenized name with minor grammar (added subject, verb tense, filler words). Detokenizing the identifier produces the same phrase the comment carries.
+
+```c
+// avoid - each comment is the identifier respaced into prose
+typedef enum {
+  PARSER_NOT_READY     = 1, ///< Parser is not yet ready.
+  PARSER_OUT_OF_RANGE  = 4, ///< Value is out of range.
+  PARSER_UNCONFIGURED  = 5, ///< Parser is unconfigured.
+} parser_status_t;
+```
+
+`PARSER_NOT_READY` detokenizes to "parser not ready"; the comment is the same phrase with an added verb. Drop.
+
+**Failure shape 2 - defining a token the identifier already uses.** The comment is a paraphrase or dictionary gloss of a token already in the identifier. Detokenize the identifier and the comment's content is the same content rendered with one or two more words.
+
+```c
+// avoid - the comment glosses a token already in the identifier
+typedef enum {
+  PARSER_TIMEOUT  = 3, ///< The operation timed out.
+  PARSER_OK       = 0, ///< Operation completed successfully.
+  PARSER_BUSY     = 2, ///< Resource is currently in use.
+} parser_status_t;
+```
+
+`TIMEOUT`, `OK`, and `BUSY` already encode their meaning; the comment is a gloss the reader did not need.
+
+**Failure shape 3 - paraphrasing the set's `@brief` onto each member.** The comment restates the rationale or context the enum's (or `#define` group's) own `@brief` already establishes. The set-level documentation is correct; the per-member paraphrase duplicates it.
+
+```c
+// avoid - each comment paraphrases the enum's @brief onto the member
+/** @brief Status codes returned by parser_read(). Non-zero values
+ *         indicate the read could not produce a valid token. */
+typedef enum {
+  PARSER_OK             = 0, ///< Returned when the read produced a valid token.
+  PARSER_NOT_READY      = 1, ///< Returned when the read could not produce a valid token because the parser isn't ready.
+  PARSER_TIMEOUT        = 3, ///< Returned when the read could not produce a valid token due to timeout.
+} parser_status_t;
+```
+
+The `@brief` already says these are status codes from `parser_read()` and that non-zero means the read failed. Repeating "returned when the read produced/could not produce a valid token" on each member adds nothing.
+
+#### Good shape
+
+```c
+// good - identifiers detokenize into phrases that already carry the
+// meaning; the enum's @brief explains the set; no per-element comment
+// is justified
+/** @brief Status codes returned by parser_read() and parser_write().
+ *         Non-zero values indicate the operation could not complete. */
+typedef enum {
+  PARSER_OK            = 0,
+  PARSER_NOT_READY     = 1,
+  PARSER_BUSY          = 2,
+  PARSER_TIMEOUT       = 3,
+  PARSER_OUT_OF_RANGE  = 4,
+} parser_status_t;
+```
+
+The good shape is the failure shape 3 enum with the per-member comments removed. The set-level `@brief` already carries "returned by parser_read()" and "non-zero means the operation could not complete," so the per-member glosses were duplicating it. The `@brief` and the identifiers together carry the meaning; nothing per-element is added.
+
+Each application site (`#define` form choice, enum-element documentation, struct-field `///<` comments) instantiates this test with site-specific content categories that justify a `///<` despite the redundancy default. See § Constants and Enum-Element Documentation and § Struct Field `///<` Comments.
+
+---
+
+### Constants and Enum-Element Documentation
+
+**Intent**: This section instantiates § Identifier Comment Redundancy Test for `#define` groups and enum elements. The default is bare. The site-specific exceptions below name when a `///<` is justified despite the redundancy default.
+
+**Convention**: For a `#define` group or the elements of an enum, the per-element decision is governed by the redundancy test. Apply it before writing any `///<`. When the set-level `@brief`, the function-level argument or return docs, and the identifier itself carry the meaning, individual elements need no comment.
+
+Documentation about a related group of constants routes to one of three places, in order of preference:
+
+| Where the meaning lives | Carries | Example |
+|---|---|---|
+| The set's enclosing `@brief` | Why the options exist as a set, and what distinguishes them from each other | The enum type's `@brief` (or the file `@brief` for loose `#define`s) lays out the tradeoff that justifies the options |
+| The function that takes or returns the constant | Which subset of values that function accepts or produces | A function returning the enum names the codes it can return in its `@return` block |
+| The constant's name itself | The constant's identity | `PARSER_MODE_POLLED` does not need a docstring saying "polled mode" |
+
+**Set-level `@brief` content.** The enum type's `@brief` (or the file `@brief` for a loose `#define` group) carries the set-level rationale: why the options exist, what differentiates them, and what tradeoff a caller is choosing among. The set-level `@brief` is the right place for content that applies to *all* members of the set. Duplicating that content onto each member is the redundancy failure shape "paraphrasing the set's `@brief` onto each member" - the per-member comment adds nothing the set-level prose does not already carry.
+
+**Function-level enum selectivity.** When a function's `@param` or `@return` block references an enum type, list only the values the function actually accepts or produces. Do not list the full enum on every consuming function. A function returning a status enum names in `@return` only the codes it can return; a function accepting an enum-typed parameter names in `@param` only the values it accepts. Listing every enum element on every function dilutes the contract and produces false expectations about which values a given call can produce or accept.
+
+If a caller needs to know which function clears a specific error condition, that information lives in the recovery function's own docs (where the call is the topic) or in the consuming function's `@return` block — not as a comment on the enum element. The enum element stays bare; navigation between codes and recovery routines is the surrounding documentation's job.
+
+Mixed presence within a group — some elements carrying `///<`, others bare — is the expected shape, not an inconsistency to fix. The `general/CLAUDE.md` § Consistent Formatting Within Groups rule governs *how* a comment is formatted (alignment, placement, line breaks), not *whether* each element has one.
+
+**Edge case — every element warranted**: If every element of an enum independently passes the redundancy test for distinct reasons (for example, an error enum where each code carries a contract-level invariant the type alone cannot convey), every element may legitimately carry a `///<`. The per-element test still applies; the all-commented result is downstream of every element independently warranting a comment, not a relaxation of the default.
+
+---
+
+### Struct Field `///<` Comments
+
+**Intent**: This section instantiates § Identifier Comment Redundancy Test for struct fields. Field-level `///<` comments name what a field IS only when the field's name and type, in the context of the enclosing type's `@brief`, do not already convey it. Translating the field name into a short English phrase adds noise without information.
+
+**Convention**: Field-level `///<` comments are the **exception, not the default**. Bare is the default. The redundancy test applies: a `///<` must add information the field's name + type + the enclosing type's `@brief` do not already convey.
+
+A `///<` that translates the name into a short English phrase, restates the type, or rephrases a role the type's `@brief` already covers fails the test.
+
+A `///<` is justified only when the comment carries one of:
+
+- An enum option set the field's *declared* type does not carry (e.g. `///< SENSOR_MODE_*` on a `uint8_t mode` whose conceptual values come from `sensor_mode_t`). The discriminator is the declared type, not whether an enum exists conceptually — a field declared as `sensor_mode_t mode` does not need the comment because the declared type already names the value set. The comment shape is the prefix glob (`SENSOR_MODE_*`), not an enumeration of every member; enumerating members (`///< SENSOR_MODE_POLLED or SENSOR_MODE_INTERRUPT.`) is a failure shape — too verbose and prone to drifting out of sync with the enum. Skip the comment entirely when the field name already carries the prefix (e.g. `uint8_t sensor_mode;` — the name routes the reader to the enum without help from `///<`).
+- An audience or scope role that disambiguates similarly-named fields (e.g. `///< Caller-owned; freed by sensor_destroy().` on a buffer pointer, distinguishing it from a callee-owned counterpart elsewhere in the same struct).
+- A contract-level invariant the caller must maintain (e.g. `///< Reserved; must be zero.` on a padding array, or `///< Optional; may be NULL.` on a callback pointer).
+
+```c
+// avoid - the first four comments translate field names into English; mode
+// enumerates members instead of using the prefix glob.
+typedef struct {
+  uint16_t register_address;  ///< Register address.
+  uint16_t timeout_ms;        ///< Timeout in milliseconds.
+  uint8_t  retry_count;       ///< Number of retries before giving up.
+  uint8_t  channel_count;     ///< Number of channels.
+  uint8_t  mode;              ///< SENSOR_MODE_POLLED or SENSOR_MODE_INTERRUPT.
+  uint8_t  reserved[3];
+} sensor_channel_config_t;
+
+// good - the type's @brief and field names self-document. Only mode keeps
+// a ///< because the option set is not derivable from uint8_t, and reserved
+// keeps a ///< because the must-be-zero contract is not derivable from the
+// name. The mode comment uses the prefix glob, not an enumeration.
+typedef struct {
+  uint16_t register_address;
+  uint16_t timeout_ms;
+  uint8_t  retry_count;
+  uint8_t  channel_count;
+  uint8_t  mode;          ///< SENSOR_MODE_*
+  uint8_t  reserved[3];   ///< Must be zero.
+} sensor_channel_config_t;
+```
+
+Mixed presence of `///<` — some fields carry it, others do not — is correct behavior when only some fields need clarification, not an inconsistency to fix. The `general/CLAUDE.md` § Consistent Formatting Within Groups rule governs *how* a comment is formatted (alignment, indent), not *whether* each field has one.
+
+**Edge case — every field warranted**: A struct whose every field independently passes the redundancy test may legitimately have a `///<` on every field. The per-field test still applies; the all-commented result is downstream of every field independently warranting a comment, not a relaxation of the default.
+
+---
+
+### Internal API Documentation
+
+**Intent**: Library-internal headers (e.g. `sensor_internal.h`) declare functions visible to library developers but excluded from generated public API docs. These declarations need documentation for the developer audience without polluting public docs.
+
+**Convention**: Use full Doxygen docstrings on internal-header declarations, using the same tags and structure as the library's public API (`@brief`, body where useful, `@param`, `@return`), with the `@internal` tag at the top of each block. The `@internal` pattern applies to all declaration kinds in internal headers — functions, types, enums, macros — not just functions. Doxygen's `INTERNAL_DOCS` Doxyfile setting controls whether `@internal` blocks appear in generated output. Default is `NO`, so public docs omit them; a developer working on the library flips `INTERNAL_DOCS = YES` locally to see internals. This gives two audiences one source of truth and requires no alternate commenting style.
+
+`EXCLUDE_SYMBOLS` in the Doxyfile is an optional mechanical safety net for projects with naming conventions that mark certain symbols as excluded (e.g. a project-wide prefix convention for internal helpers). It catches symbols that are missing the `@internal` tag by a typo or oversight, but it is not a substitute for the tag — the tag is what tells a human reader the symbol is internal.
+
+```c
+// good - internal header declaration with @internal tag and full docstring
+/**
+ * @internal
+ *
+ * @brief Recomputes the cached calibration coefficients for a sensor.
+ *
+ * Walks the calibration record loaded at boot, applies any pending
+ * runtime corrections, and writes the result to the sensor's coefficient
+ * cache. Called by the public sensor API whenever calibration state
+ * changes; library developers call it directly when bypassing the
+ * top-level entry points during fault recovery.
+ *
+ * @param sensor  Sensor handle.
+ *
+ * @return 0 on success, -1 if the calibration record is missing or invalid.
+ */
+int sensor_internal_recompute_calibration(sensor_t* sensor);
+```
+
+Do not use plain C comments (`/* */` or `//`) to hide internal helpers from Doxygen. Hiding the symbol from the tool is the goal, but plain C comments send the wrong signal to a human reading the source: they read as "this function is less carefully documented than the rest of the library," when the right signal is "this function is internal and the generator knows to hide it."
+
+```c
+// avoid - plain C comments to hide an internal helper from Doxygen
+// Recomputes calibration coefficients. Internal use only.
+int sensor_internal_recompute_calibration(sensor_t* sensor);
+```
+
+Do not use `\cond` / `\endcond` block markers for single-symbol internal documentation. The `\cond` mechanism is appropriate for structural hiding of whole file regions; single-symbol cases are what `@internal` is for, and using `\cond` for one declaration adds machinery that obscures the simpler tag.
+
+```c
+// avoid - \cond markers for a single internal declaration
+/** \cond INTERNAL */
+/**
+ * @brief Recomputes calibration coefficients.
+ */
+int sensor_internal_recompute_calibration(sensor_t* sensor);
+/** \endcond */
+```
+
+**When to deviate**: Single-header libraries with no separate internal header do not need this convention — all declarations are already public.
 
 ---
 
@@ -734,37 +1240,37 @@ Do not align continuation lines to the opening paren - this produces deep indent
 
 ```c
 // good - one arg per line at body indent; both closing parens on their own line
-if (filter_matches(
-  filter,
-  &request.source,
-  request.destination,
-  request.kind,
+if (sensor_matches_calibration(
+  calibration,
+  &reading.channel,
+  reading.timestamp,
+  reading.value,
   clock_get_timestamp()
 ))
   return;
 
 // avoid - args aligned to the opening paren (deep indentation, fragile)
-if (filter_matches(
-      filter, &request.source,
-      request.destination, request.kind,
+if (sensor_matches_calibration(
+      calibration, &reading.channel,
+      reading.timestamp, reading.value,
       clock_get_timestamp()))
   return;
 
 // avoid - closing parens tucked onto the last argument's line
-if (filter_matches(
-  filter,
-  &request.source,
-  request.destination,
-  request.kind,
+if (sensor_matches_calibration(
+  calibration,
+  &reading.channel,
+  reading.timestamp,
+  reading.value,
   clock_get_timestamp()))
   return;
 
 // avoid - call's `)` stays inline but condition's `)` drops to its own line
-if (filter_matches(
-  filter,
-  &request.source,
-  request.destination,
-  request.kind,
+if (sensor_matches_calibration(
+  calibration,
+  &reading.channel,
+  reading.timestamp,
+  reading.value,
   clock_get_timestamp())
 )
   return;
@@ -774,38 +1280,72 @@ if (filter_matches(
 
 ---
 
-### Blank Line After Declarations
+### Vertical Separation
 
-**Intent**: Visually separate variable declarations from the executable code that follows.
+**Intent**: Use blank lines to mark transitions between roles in a function's flow, so the reader can see the structure at a glance. See `general/CLAUDE.md` § Vertical Separation Between Concepts for the cross-language principle.
 
-**Convention**: Separate block-top declarations from executable statements with a blank line. A group of one-line declarations can be written together, but a multi-line expression is its own thought and gets a blank line before and after it. This applies to multi-line function calls and assertions too - adjacent multi-line statements need blank lines between them. A `return` at the end of a logical block should be separated from the preceding assignments by a blank line. Exception: when a one-line declaration is directly tied to the action that follows (declaration-and-use as a single thought), the blank line is unnecessary. This is a style workaround for C's verbose grammar.
+**Convention**: Insert a blank line at each role transition - setup to main work, work to a decision, decision back to work, work to teardown, work to outcome. Statements that share a role stay together regardless of statement kind. Sequential decisions (each `if (cond) return;` guard) are sequential roles and each gets its own blank line above it. A multi-line expression is its own thought and gets a blank line before and after it; this is one of the role-transition cases, since a multi-line expression's cognitive weight forces it to read as its own step. Exception: a single-statement body of a control statement (`if (condition) return;`) is one decision and is not split.
 
 ```c
-// good - blank line after block-top declarations
+// good - blank lines mark role transitions
 void process_reading(sensor_t* sensor)
 {
   int result = 0;
   int32_t value = 0;
 
   result = sensor_read(sensor, &value);
+
   if (result < 0)
     return;
 
   publish(value);
 }
 
-// good - inline declaration-and-use as a single thought
-void process_reading(sensor_t* sensor)
+// good - assignment cluster stays together; blank line before the decision
+bool decode_one(const char* in, uint8_t* out)
 {
-  int result = sensor_read(sensor, &value);
-  if (result < 0)
-    return;
+  int high = hex_nibble(in[0]);
+  int low = hex_nibble(in[1]);
 
-  int32_t calibrated = apply_offset(value, sensor->offset);
-  publish(calibrated);
+  if (high < 0 || low < 0)
+    return false;
+
+  *out = (uint8_t) ((high << 4) | low);
+
+  return true;
 }
 
-// good - multi-line expression separated from one-liners
+// good - sequential guards each separated; each is its own decision
+int parse_header(const uint8_t* buf, size_t length)
+{
+  if (buf == NULL)
+    return -1;
+
+  if (length < HEADER_SIZE)
+    return -2;
+
+  return decode_header(buf);
+}
+
+// good - return at end of logical block separated from the preceding work
+bool decode_pair(const char* in, size_t length, uint8_t* out, size_t* out_length)
+{
+  for (size_t i = 0; i < length; i += 2) {
+    int high = hex_nibble(in[i]);
+    int low = hex_nibble(in[i + 1]);
+
+    if (high < 0 || low < 0)
+      return false;
+
+    out[i / 2] = (uint8_t) ((high << 4) | low);
+  }
+
+  *out_length = length / 2;
+
+  return true;
+}
+
+// good - multi-line expression separated from one-liners on each side
 bool higher_priority = candidate->priority > current->priority;
 
 bool same_priority_earlier =
@@ -815,16 +1355,90 @@ bool same_priority_earlier =
 if (higher_priority || same_priority_earlier)
   best = (int) i;
 
-// avoid - no blank line after block-top declarations
-void process_reading(sensor_t* sensor)
+// good - related action calls share the "main work" role and stay together
+void emit_status(const sensor_t* sensor)
 {
-  int result = 0;
-  int32_t value = 0;
-  result = sensor_read(sensor, &value);
-  if (result < 0)
-    return;
+  log_reading(sensor->last_value);
+  notify_subscribers(sensor);
+  update_metrics(sensor);
+}
 
-  publish(value);
+// good - mixed-kind statements that share a role stay together; transitions
+// between roles get a blank line
+int run(const sensor_t* sensor)
+{
+  initialize(sensor);
+
+  int value = get_current_value(sensor);
+  set_value("sensor_value", value);
+  notify_subscribers(sensor);
+
+  cleanup(sensor);
+
+  return STATUS_SUCCESS;
+}
+
+// good - role transition applies to any control-flow construct, not just `if`
+void process_batch(const sensor_t* sensors, size_t count)
+{
+  size_t valid_count = count_valid(sensors, count);
+
+  for (size_t i = 0; i < valid_count; i++)
+    process(&sensors[i]);
+}
+
+// good - the closing `}` of a control structure does not act as separation;
+// the return that follows is a different role and gets its own blank line
+size_t count_valid(const sensor_t* sensors, size_t count)
+{
+  size_t valid = 0;
+
+  for (size_t i = 0; i < count; i++) {
+    if (sensors[i].status == SENSOR_OK)
+      valid++;
+  }
+
+  return valid;
+}
+
+// avoid - assignments jammed against the decision
+bool decode_one(const char* in, uint8_t* out)
+{
+  int high = hex_nibble(in[0]);
+  int low = hex_nibble(in[1]);
+  if (high < 0 || low < 0)
+    return false;
+
+  *out = (uint8_t) ((high << 4) | low);
+  return true;
+}
+
+// avoid - return jammed against the preceding assignment
+size_t sensor_frame_size(const sensor_frame_t* frame)
+{
+  size_t header = sizeof(frame->header);
+  size_t body = frame->body_length;
+  size_t total = header + body;
+  return total;
+}
+
+// avoid - statements of a shared role split by unnecessary blank lines
+void emit_status(const sensor_t* sensor)
+{
+  log_reading(sensor->last_value);
+
+  notify_subscribers(sensor);
+
+  update_metrics(sensor);
+}
+
+// avoid - comment placed between an assignment and a return does not
+// satisfy the separation; comments belong above what they describe
+int finalize(int raw)
+{
+  int adjusted = raw * SCALE + OFFSET;
+  // SCALE and OFFSET come from the calibration block above
+  return adjusted;
 }
 ```
 
@@ -922,12 +1536,12 @@ typedef struct __attribute__((packed)) {
 
 // avoid - unnecessary blank lines between flat fields
 typedef struct {
-  uint16_t port;
+  uint16_t address;
 
-  app_protocol_t protocol;
+  sensor_protocol_t protocol;
 
   uint8_t flags;
-} app_port_rule_t;
+} sensor_channel_binding_t;
 ```
 
 **When to deviate**: When a struct has distinct logical groups of fields (e.g. configuration fields followed by state fields), a blank line between groups improves readability.
@@ -938,35 +1552,56 @@ typedef struct {
 
 **Intent**: Vertical alignment makes related groups of constants and annotations scannable.
 
-**Convention**: The general style guide deprecates vertical alignment of code symbols. In C, two exceptions apply:
+**Convention**: The general style guide deprecates vertical alignment of code symbols. In C, two exceptions apply. These exceptions remain current under `--rewrite` mode; they are not subject to the general guide's vertical-alignment deprecation.
 
-1. **`#define` groups** - right-justify values (ones column aligned) within related groups of constants. The largest value should be at least one tab stop from the longest constant name. Each group is its own alignment context - separate groups (e.g. max constants vs. sentinel values) do not share a column. Right-justification makes magnitudes visually comparable; left-justification creates ragged right edges that are hard to scan as a column of numbers. A solo define (or a group of one) uses 1-2 tab stops (>= 2 spaces) between the name and value - it should not stretch to match an adjacent group's wider column. Excessive whitespace on a solo define looks like a formatting error rather than intentional alignment.
-2. **Inline comments** - align inline comments across related lines. Unaligned comments become visual noise. This includes `///<` trailing docs on struct fields and enum values - all `///<` comments in a group must start at the same column.
+The alignment-column rule for both exceptions: a tab stop is 2 spaces (column positions at multiples of 2 from the line start: column 0, 2, 4, 6, ...). Compute the longest name's last-character column in the group (including the `#define ` keyword for `#define` groups, or the field type and name for struct fields), then place the value (or comment) column at the soonest tab stop that leaves a minimum 2-space gap past it. This is a target, not a minimum - excess padding past the soonest fitting tab stop looks like a formatting error rather than intentional alignment.
+
+1. **`#define` groups** - left-align values within related groups of constants, with all values starting at the same column. Apply the tab-stop rule above to choose the value column. Each group is its own alignment context - separate groups (e.g. max constants vs. sentinel values) do not share a column. A shared left-aligned column makes the values scannable regardless of their internal shape (numeric, hex, type cast, macro reference, string literal). A solo define (or a group of one) follows the same tab-stop rule against its own name - it does not stretch to match an adjacent group's wider column.
+
+   **Signed numeric groups**: when a group contains any negative numeric value, pad positive values with a leading space so the most-significant digit aligns down the column. The minus sign sits one column left of the digit column. Without the leading-space padding, the `-` would occupy the digit column on negative lines and the most-significant digit of positive values would sit one column right of the digits on negative lines, breaking magnitude reading.
+2. **Inline comments** - align inline comments across related lines. Unaligned comments become visual noise. This includes `///<` trailing docs on struct fields and enum values - all `///<` comments in a group must start at the same column, chosen by the tab-stop rule above.
 
 CAUTION: After writing a struct or enum with `///<` comments, verify all comments in the group start at the same column. One field name longer than the others causes misalignment.
 
 All other cases (struct fields, enum values, designated initializers, local variables, assignments, function params, static variables) default to unaligned. Alignment in these cases creates diff noise when lines are added or changed, contradicting the benefit of trailing commas.
 
 ```c
-// good - right-justified values (ones column aligned), group-local alignment
-#define MAX_SENSORS          16
-#define MAX_READINGS        128
-#define MAX_BUFFER_SIZE     256
-#define MAX_RETRY_COUNT       8
-
-// good - separate group, its own alignment context
-#define SENSOR_NONE    0
-#define SENSOR_ANY     0
-
-// avoid - left-justified values (ragged right edge, magnitudes not comparable)
+// good - values left-aligned at a shared column, group-local alignment
 #define MAX_SENSORS       16
 #define MAX_READINGS      128
 #define MAX_BUFFER_SIZE   256
 #define MAX_RETRY_COUNT   8
 
+// good - separate group, its own alignment context
+#define SENSOR_NONE   0
+#define SENSOR_ANY    0
+
+// good - non-numeric values follow the same rule
+#define SENSOR_RESET_CMD    "RST\r\n"
+#define SENSOR_PING_CMD     "PING\r\n"
+#define SENSOR_VERSION_CMD  "VER?\r\n"
+
+// good - signed group: positive values padded so digits align down the column
+#define SENSOR_OFFSET_MIN   -128
+#define SENSOR_OFFSET_ZERO   0
+#define SENSOR_OFFSET_MAX    127
+
+// avoid - signed group with sign in the alignment column (digits do not
+// share a column - the `1` of `-128` is one column right of the `0` and `1`
+// in the unsigned values, breaking magnitude reading)
+#define SENSOR_OFFSET_MIN  -128
+#define SENSOR_OFFSET_ZERO 0
+#define SENSOR_OFFSET_MAX  127
+
 // avoid - separate group forced to share the wider group's column
 #define SENSOR_NONE                0
 #define SENSOR_ANY                 0
+
+// avoid - excess padding past the soonest fitting tab stop
+#define MAX_SENSORS               16
+#define MAX_READINGS              128
+#define MAX_BUFFER_SIZE           256
+#define MAX_RETRY_COUNT           8
 
 // good - aligned inline comments
 int result = read_sensor(&sensor, &value);  // returns 0 on success
@@ -984,18 +1619,18 @@ int status = calibrate(&sensor); // must be called after read
 
 // avoid - misaligned ///< on struct fields
 typedef struct {
-  int current_state; ///< Current state
-  int event; ///< Triggering event
-  int next_state; ///< State after transition
-  action_callback_t action; ///< Optional callback; may be NULL
+  int current_state; ///< Index into state_table[]; -1 if uninitialized.
+  int event; ///< EVENT_NONE through EVENT_MAX-1.
+  int next_state; ///< Index into state_table[]; -1 to remain in current state.
+  action_callback_t action; ///< Optional; may be NULL.
 } transition_t;
 
 // good - all ///< comments start at the same column
 typedef struct {
-  int current_state;        ///< Current state
-  int event;                ///< Triggering event
-  int next_state;           ///< State after transition
-  action_callback_t action; ///< Optional callback; may be NULL
+  int current_state;        ///< Index into state_table[]; -1 if uninitialized.
+  int event;                ///< EVENT_NONE through EVENT_MAX-1.
+  int next_state;           ///< Index into state_table[]; -1 to remain in current state.
+  action_callback_t action; ///< Optional; may be NULL.
 } transition_t;
 ```
 
@@ -1055,18 +1690,18 @@ typedef enum {
 Structs used only within a single application do not need packing.
 
 ```c
-// good - packed struct for IPC message
+// good - packed struct for an over-the-wire sensor reading frame
 typedef struct __attribute__((packed)) {
-  uint8_t message_type;
+  uint8_t frame_type;
   uint16_t payload_length;
   uint8_t payload[128];
-} app_ipc_message_t;
+} sensor_frame_t;
 
 // good - internal struct; no packing needed
 typedef struct {
-  uint16_t port;
-  app_protocol_t protocol;
-} app_port_rule_t;
+  uint16_t address;
+  sensor_protocol_t protocol;
+} sensor_channel_binding_t;
 ```
 
 **When to deviate**: Some architectures penalize or fault on unaligned access. On those platforms, weigh the portability benefit of packing against the performance cost, and consider serialization as an alternative.
@@ -1354,7 +1989,7 @@ typedef struct {
 
 ```c
 // good - static function, no namespace prefix needed
-static int find_best(const tq_t* queue)
+static int find_best(const sensor_queue_t* queue)
 {
   // ...
 }
@@ -1368,7 +2003,7 @@ static uint16_t sensor_count;
 static bool initialized = false;
 
 // avoid - internal function without static (leaks into global namespace)
-int find_best(const tq_t* queue)
+int find_best(const sensor_queue_t* queue)
 {
   // ...
 }
@@ -1551,22 +2186,22 @@ It is OK for a cleanup function to fail and return an error - but it must not sh
 
 ```c
 // good - goto centralizes cleanup; mutex is always unlocked
-int port_send(message_t* message)
+int sensor_publish(sensor_t* sensor, const sensor_frame_t* frame)
 {
-  uint32_t total_bytes = htonl(message->index);
+  uint32_t total_bytes = htonl(frame->payload_length);
   size_t sent_bytes = 0;
 
-  pthread_mutex_lock(&write_lock);
+  pthread_mutex_lock(&sensor->write_lock);
 
-  int result = write(STDOUT_FILENO, &total_bytes, sizeof(total_bytes));
+  int result = write(sensor->fd, &total_bytes, sizeof(total_bytes));
   if (result != 4)
     goto error;
 
-  while (sent_bytes < message->index) {
+  while (sent_bytes < frame->payload_length) {
     size_t sent = write(
-      STDOUT_FILENO,
-      message->buffer + sent_bytes,
-      message->index - sent_bytes
+      sensor->fd,
+      frame->payload + sent_bytes,
+      frame->payload_length - sent_bytes
     );
 
     if (sent < 0)
@@ -1575,12 +2210,12 @@ int port_send(message_t* message)
     sent_bytes += sent;
   }
 
-  pthread_mutex_unlock(&write_lock);
+  pthread_mutex_unlock(&sensor->write_lock);
 
   return 0;
 
 error:
-  pthread_mutex_unlock(&write_lock);
+  pthread_mutex_unlock(&sensor->write_lock);
 
   return -1;
 }
@@ -1953,7 +2588,7 @@ sensor_t* sensor = (sensor_t*) calloc(1, sizeof(*sensor));
 uint8_t* buffer = (uint8_t*) malloc(packet_length);
 ```
 
-**When to deviate**: When writing code that must compile as both C and C++ (C++ requires the cast). Use `// style:ok - C++ compatibility` if needed.
+**When to deviate**: When writing code that must compile as both C and C++ (C++ requires the cast).
 
 ---
 
@@ -2593,35 +3228,35 @@ for (int i = 0; fields[i].name != NULL; i++)
 
 ```c
 // good - declarations separated from assertions
-some_handle_t client = some_reserve();
-client_record_t record = {0};
+sensor_t* sensor = sensor_create();
+calibration_t calibration = {0};
 
-ASSERT_CREATED(
-  client_create(client, token, &record),
-  "client"
+ASSERT_OK(
+  sensor_init(sensor, &calibration),
+  "sensor init"
 );
 
 // good - related declarations grouped, assertions grouped
-some_token_t public_free, public_token;
-some_token_t private_free, private_token;
+sensor_channel_t* primary_high, *primary_low;
+sensor_channel_t* backup_high, *backup_low;
 
 ASSERT_OK(
-  token_slot_pool_alloc(&public_free),
-  "public free"
+  sensor_channel_enable(&primary_high),
+  "primary high"
 );
 
 ASSERT_OK(
-  token_slot_pool_alloc(&public_token),
-  "public token"
+  sensor_channel_enable(&primary_low),
+  "primary low"
 );
 
 // good - short assertion on one line when the variable is declared immediately above
-some_handle_t queue = queue_create();
-ASSERT_OK(queue_start(queue), "queue start");
+sensor_t* sensor = sensor_create();
+ASSERT_OK(sensor_start(sensor), "sensor start");
 
 // avoid - declaration buried inside assertion
 ASSERT_OK(
-  token_slot_pool_alloc(&token), "alloc"
+  sensor_channel_enable(&channel), "enable"
 );
 ```
 
